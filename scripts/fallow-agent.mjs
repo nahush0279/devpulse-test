@@ -1,0 +1,199 @@
+// scripts/fallow-agent.mjs
+// AI review agent: Fallow (deterministic facts) -> Groq LLM (judgment) -> PR comment.
+// Requires: GROQ_API_KEY, GITHUB_TOKEN, PR_NUMBER, REPO env vars.
+// Node 20+ (uses global fetch). No external dependencies.
+
+import { readFileSync } from "node:fs";
+
+const {
+  GROQ_API_KEY,
+  GITHUB_TOKEN,
+  PR_NUMBER,
+  REPO,
+  BASE_REF = "main",
+  HEAD_SHA = "",
+} = process.env;
+
+const COMMENT_MARKER = "<!-- fallow-ai-agent -->";
+// Groq model — fast and free-tier friendly. Swap if you prefer another Groq-hosted model.
+const MODEL = "llama-3.3-70b-versatile";
+
+// ---------------------------------------------------------------------------
+// 1. Load the fallow report
+// ---------------------------------------------------------------------------
+let report;
+try {
+  report = JSON.parse(readFileSync("fallow-report.json", "utf8"));
+} catch (err) {
+  console.error("Could not read/parse fallow-report.json:", err.message);
+  process.exit(0); // don't fail the PR because the agent broke
+}
+
+const verdict = report.verdict ?? "unknown";
+
+// If fallow found nothing, post (or update to) a short all-clear and exit.
+const hasFindings =
+  JSON.stringify(report).length > 2 && verdict !== "pass"
+    ? true
+    : countIssues(report) > 0;
+
+function countIssues(r) {
+  let n = 0;
+  const walk = (v) => {
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (
+          item &&
+          typeof item === "object" &&
+          ("file" in item || "kind" in item || "type" in item)
+        )
+          n++;
+        walk(item);
+      }
+    } else if (v && typeof v === "object") {
+      Object.values(v).forEach(walk);
+    }
+  };
+  walk(r);
+  return n;
+}
+
+// ---------------------------------------------------------------------------
+// 2. Ask the LLM to turn raw findings into a useful review
+// ---------------------------------------------------------------------------
+async function generateReview() {
+  if (!hasFindings) {
+    return `### ✅ Fallow AI Review — clean\n\nNo new dead code, unused dependencies, or circular dependencies introduced by this PR. Nice.`;
+  }
+
+  // Keep the prompt within budget — truncate huge reports.
+  const reportText = JSON.stringify(report, null, 1).slice(0, 50_000);
+  let dupesText = "{}";
+  try {
+    dupesText = JSON.stringify(
+      JSON.parse(readFileSync("fallow-dupes.json", "utf8")),
+      null,
+      1,
+    ).slice(0, 20_000);
+  } catch {
+    /* dupes report optional */
+  }
+
+  const blockFlags = [
+    process.env.CONSOLE_FAIL === "true" &&
+      "console statements were added in this PR (see CI log for lines)",
+    process.env.UNUSED_IMPORT_FAIL === "true" &&
+      "file-local unused imports/variables were found in changed files (see ESLint output in CI log)",
+  ].filter(Boolean);
+
+  const systemPrompt = `You are a senior code-review agent for a TypeScript/JavaScript repository.
+You receive JSON output from "fallow audit" and "fallow dupes" run against a pull request.
+The audit report distinguishes findings INTRODUCED by this PR from PRE-EXISTING ones.
+
+This repo enforces a two-tier policy:
+- BLOCKING (merge is blocked until fixed): EVERYTHING unused — files, exports, types, dependencies,
+  enum/class members — plus unresolved/unlisted imports, duplicate exports, console statements,
+  and file-local unused imports.
+- ADVISORY (comment only, never blocks): code duplication and circular dependencies.
+
+Write a GitHub PR review comment in Markdown. Rules:
+- Start with a one-line verdict summary (audit verdict is "${verdict}").
+- Section 1: "⛔ Blocking — must fix before merge" — every BLOCKING finding introduced by this PR:
+  \`file:line\` — what it is, the concrete fix (use the per-issue "actions" array when present;
+  mention if auto-fixable via \`npx fallow fix\`). If console-statement or unused-import flags
+  are set in the user message, include them here.
+- Section 2: "💡 Advisory — worth a look, not blocking" — duplication and circular-dependency
+  findings. For duplicates, name BOTH locations and suggest where the shared logic should live.
+  For cycles, show the cycle path and the cheapest edge to break.
+- Section 3: "📋 Pre-existing (not your fault, FYI)" — collapse into a <details> block, max 10 items.
+- Be concise and specific. No generic advice, no praise filler, no preamble.
+- If a finding looks like a likely false positive (e.g. framework convention export, dynamic import
+  target), say so and suggest a fallow suppression comment instead of deletion.
+- Output ONLY the Markdown comment body, nothing else.`;
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 2000,
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content:
+            `Base branch: ${BASE_REF}\nHead SHA: ${HEAD_SHA}\n` +
+            (blockFlags.length
+              ? `\nAdditional BLOCKING flags from CI:\n- ${blockFlags.join("\n- ")}\n`
+              : "") +
+            `\nFallow audit JSON:\n\`\`\`json\n${reportText}\n\`\`\`` +
+            `\n\nFallow dupes JSON (changed files vs whole repo):\n\`\`\`json\n${dupesText}\n\`\`\``,
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Groq API ${res.status}: ${body.slice(0, 500)}`);
+  }
+
+  const data = await res.json();
+  const text = (data.choices?.[0]?.message?.content ?? "").trim();
+
+  return `### 🧹 Fallow AI Review\n\n${text}`;
+}
+
+// ---------------------------------------------------------------------------
+// 3. Upsert a single PR comment (edit on re-runs instead of spamming)
+// ---------------------------------------------------------------------------
+const gh = (path, init = {}) =>
+  fetch(`https://api.github.com${path}`, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${GITHUB_TOKEN}`,
+      accept: "application/vnd.github+json",
+      "content-type": "application/json",
+      ...init.headers,
+    },
+  });
+
+async function upsertComment(body) {
+  const full = `${COMMENT_MARKER}\n${body}\n\n<sub>Generated by the Fallow AI agent on \`${HEAD_SHA.slice(0, 7)}\`</sub>`;
+
+  // Find existing agent comment
+  const listRes = await gh(
+    `/repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100`,
+  );
+  const comments = listRes.ok ? await listRes.json() : [];
+  const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
+
+  if (existing) {
+    const r = await gh(`/repos/${REPO}/issues/comments/${existing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body: full }),
+    });
+    if (!r.ok) throw new Error(`Failed to update comment: ${r.status}`);
+    console.log("Updated existing agent comment.");
+  } else {
+    const r = await gh(`/repos/${REPO}/issues/${PR_NUMBER}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body: full }),
+    });
+    if (!r.ok) throw new Error(`Failed to create comment: ${r.status}`);
+    console.log("Posted new agent comment.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+try {
+  const review = await generateReview();
+  await upsertComment(review);
+} catch (err) {
+  console.error("Agent failed:", err.message);
+  process.exit(0); // never block the PR on agent failure
+}

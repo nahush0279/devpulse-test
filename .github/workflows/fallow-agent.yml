@@ -1,0 +1,103 @@
+name: Fallow AI Review Agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: fallow-agent-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  fallow-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed so fallow can diff against the base branch
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ════════════════════════════════════════════════════════════════
+      # BLOCKING CHECKS — fail the PR if any of these are introduced
+      # ════════════════════════════════════════════════════════════════
+
+      # 1. console.log / unused-imports added by THIS PR (added lines only)
+      - name: Block new console logs & unused imports
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+          BASE="origin/${{ github.base_ref }}"
+
+          # --- console statements in added lines of JS/TS files ---
+          ADDED_CONSOLE=$(git diff "$BASE"...HEAD --unified=0 -- '*.js' '*.jsx' '*.ts' '*.tsx' \
+            | grep -E '^\+' | grep -vE '^\+\+\+' \
+            | grep -E 'console\.(log|debug|info|warn|error)\(' \
+            | grep -v 'eslint-disable' || true)
+
+          if [ -n "$ADDED_CONSOLE" ]; then
+            echo "::error::This PR adds console statements. Remove them or use the project logger:"
+            echo "$ADDED_CONSOLE"
+            echo "CONSOLE_FAIL=true" >> "$GITHUB_ENV"
+          fi
+
+          # --- unused imports (file-local) via ESLint on changed files only ---
+          CHANGED=$(git diff "$BASE"...HEAD --name-only --diff-filter=ACMR -- '*.js' '*.jsx' '*.ts' '*.tsx')
+          if [ -n "$CHANGED" ]; then
+            npx eslint --no-eslintrc --parser-options=ecmaVersion:latest,sourceType:module \
+              --rule '{"no-unused-vars": ["error", {"args":"none","varsIgnorePattern":"^_"}]}' \
+              $CHANGED || echo "UNUSED_IMPORT_FAIL=true" >> "$GITHUB_ENV"
+          fi
+
+      # 2. Fallow gate — fail the PR on blocking findings in changed files.
+      #    --changed-since limits scope to what this PR touched (your "new-only").
+      #    --fail-on-issues exits 1 -> blocks the merge.
+      #    Severity per category still comes from .fallowrc.json (error vs warn).
+      - name: Fallow audit (gate)
+        run: |
+          npx fallow audit \
+            --changed-since "origin/${{ github.base_ref }}" \
+            --fail-on-issues
+
+      # ════════════════════════════════════════════════════════════════
+      # ADVISORY LAYER — duplication & circular deps: comment, never block
+      # ════════════════════════════════════════════════════════════════
+
+      - name: Fallow audit (JSON for agent)
+        if: always() # run even if blocking checks failed, so the comment explains why
+        run: |
+          npx fallow audit \
+            --changed-since "origin/${{ github.base_ref }}" \
+            --format json > fallow-report.json || true
+          npx fallow dupes \
+            --changed-since "origin/${{ github.base_ref }}" \
+            --format json > fallow-dupes.json || true
+
+      - name: AI agent — analyze & comment on PR
+        if: always()
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CONSOLE_FAIL: ${{ env.CONSOLE_FAIL }}
+          UNUSED_IMPORT_FAIL: ${{ env.UNUSED_IMPORT_FAIL }}
+        run: node scripts/fallow-agent.mjs
+
+      # Surface the grep-based failures as a job failure at the end,
+      # after the agent has had a chance to comment.
+      - name: Enforce console/import blocks
+        if: env.CONSOLE_FAIL == 'true' || env.UNUSED_IMPORT_FAIL == 'true'
+        run: |
+          echo "Blocking issues found (console logs and/or unused imports). See the agent comment."
+          exit 1
