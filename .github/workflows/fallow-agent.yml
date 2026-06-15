@@ -1,103 +1,180 @@
-name: Fallow AI Review Agent
+// scripts/fallow-agent.mjs
+// AI review agent: Fallow (deterministic facts) -> Groq LLM (judgment) -> PR comment.
+// Requires: GROQ_API_KEY, GITHUB_TOKEN, PR_NUMBER, REPO env vars.
+// Node 20+ (uses global fetch). No external dependencies.
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+import { readFileSync } from "node:fs";
 
-permissions:
-  contents: read
-  pull-requests: write
+const {
+  GROQ_API_KEY,
+  GITHUB_TOKEN,
+  PR_NUMBER,
+  REPO,
+  BASE_REF = "main",
+  HEAD_SHA = "",
+} = process.env;
 
-concurrency:
-  group: fallow-agent-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+const COMMENT_MARKER = "<!-- fallow-ai-agent -->";
+// Groq model — fast and free-tier friendly. Swap if you prefer another Groq-hosted model.
+const MODEL = "llama-3.3-70b-versatile";
 
-jobs:
-  fallow-agent:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # needed so fallow can diff against the base branch
+// ---------------------------------------------------------------------------
+// 1. Load the fallow report
+// ---------------------------------------------------------------------------
+let report;
+try {
+  report = JSON.parse(readFileSync("fallow-report.json", "utf8"));
+} catch (err) {
+  console.error("Could not read/parse fallow-report.json:", err.message);
+  process.exit(0); // don't fail the PR because the agent broke
+}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+const verdict = report.verdict ?? "unknown";
 
-      - name: Install dependencies
-        run: npm ci
+// If fallow found nothing, post (or update to) a short all-clear and exit.
+const hasFindings = JSON.stringify(report).length > 2 && verdict !== "pass"
+  ? true
+  : countIssues(report) > 0;
 
-      # ════════════════════════════════════════════════════════════════
-      # BLOCKING CHECKS — fail the PR if any of these are introduced
-      # ════════════════════════════════════════════════════════════════
+function countIssues(r) {
+  let n = 0;
+  const walk = (v) => {
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item && typeof item === "object" && ("file" in item || "kind" in item || "type" in item)) n++;
+        walk(item);
+      }
+    } else if (v && typeof v === "object") {
+      Object.values(v).forEach(walk);
+    }
+  };
+  walk(r);
+  return n;
+}
 
-      # 1. console.log / unused-imports added by THIS PR (added lines only)
-      - name: Block new console logs & unused imports
-        run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1 || true
-          BASE="origin/${{ github.base_ref }}"
+// ---------------------------------------------------------------------------
+// 2. Ask the LLM to turn raw findings into a useful review
+// ---------------------------------------------------------------------------
+async function generateReview() {
+  if (!hasFindings) {
+    return `### ✅ Fallow AI Review — clean\n\nNo new dead code, unused dependencies, or circular dependencies introduced by this PR. Nice.`;
+  }
 
-          # --- console statements in added lines of JS/TS files ---
-          ADDED_CONSOLE=$(git diff "$BASE"...HEAD --unified=0 -- '*.js' '*.jsx' '*.ts' '*.tsx' \
-            | grep -E '^\+' | grep -vE '^\+\+\+' \
-            | grep -E 'console\.(log|debug|info|warn|error)\(' \
-            | grep -v 'eslint-disable' || true)
+  // Keep the prompt within budget — truncate huge reports.
+  const reportText = JSON.stringify(report, null, 1).slice(0, 50_000);
+  let dupesText = "{}";
+  try {
+    dupesText = JSON.stringify(JSON.parse(readFileSync("fallow-dupes.json", "utf8")), null, 1).slice(0, 20_000);
+  } catch { /* dupes report optional */ }
 
-          if [ -n "$ADDED_CONSOLE" ]; then
-            echo "::error::This PR adds console statements. Remove them or use the project logger:"
-            echo "$ADDED_CONSOLE"
-            echo "CONSOLE_FAIL=true" >> "$GITHUB_ENV"
-          fi
+  const blockFlags = [
+    process.env.CONSOLE_FAIL === "true" && "console statements were added in this PR (see CI log for lines)",
+    process.env.UNUSED_IMPORT_FAIL === "true" && "file-local unused imports/variables were found in changed files (see ESLint output in CI log)",
+  ].filter(Boolean);
 
-          # --- unused imports (file-local) via ESLint on changed files only ---
-          CHANGED=$(git diff "$BASE"...HEAD --name-only --diff-filter=ACMR -- '*.js' '*.jsx' '*.ts' '*.tsx')
-          if [ -n "$CHANGED" ]; then
-            npx eslint --no-eslintrc --parser-options=ecmaVersion:latest,sourceType:module \
-              --rule '{"no-unused-vars": ["error", {"args":"none","varsIgnorePattern":"^_"}]}' \
-              $CHANGED || echo "UNUSED_IMPORT_FAIL=true" >> "$GITHUB_ENV"
-          fi
+  const systemPrompt = `You are a senior code-review agent for a TypeScript/JavaScript repository.
+You receive JSON output from "fallow audit" and "fallow dupes" run against a pull request.
+The audit report distinguishes findings INTRODUCED by this PR from PRE-EXISTING ones.
 
-      # 2. Fallow gate — fail the PR on blocking findings in changed files.
-      #    --changed-since limits scope to what this PR touched (your "new-only").
-      #    --fail-on-issues exits 1 -> blocks the merge.
-      #    Severity per category still comes from .fallowrc.json (error vs warn).
-      - name: Fallow audit (gate)
-        run: |
-          npx fallow audit \
-            --changed-since "origin/${{ github.base_ref }}" \
-            --fail-on-issues
+This repo enforces a two-tier policy:
+- BLOCKING (merge is blocked until fixed): EVERYTHING unused — files, exports, types, dependencies,
+  enum/class members — plus unresolved/unlisted imports, duplicate exports, console statements,
+  and file-local unused imports.
+- ADVISORY (comment only, never blocks): code duplication and circular dependencies.
 
-      # ════════════════════════════════════════════════════════════════
-      # ADVISORY LAYER — duplication & circular deps: comment, never block
-      # ════════════════════════════════════════════════════════════════
+Write a GitHub PR review comment in Markdown. Rules:
+- Start with a one-line verdict summary (audit verdict is "${verdict}").
+- Section 1: "⛔ Blocking — must fix before merge" — every BLOCKING finding introduced by this PR:
+  \`file:line\` — what it is, the concrete fix (use the per-issue "actions" array when present;
+  mention if auto-fixable via \`npx fallow fix\`). If console-statement or unused-import flags
+  are set in the user message, include them here.
+- Section 2: "💡 Advisory — worth a look, not blocking" — duplication and circular-dependency
+  findings. For duplicates, name BOTH locations and suggest where the shared logic should live.
+  For cycles, show the cycle path and the cheapest edge to break.
+- Section 3: "📋 Pre-existing (not your fault, FYI)" — collapse into a <details> block, max 10 items.
+- Be concise and specific. No generic advice, no praise filler, no preamble.
+- If a finding looks like a likely false positive (e.g. framework convention export, dynamic import
+  target), say so and suggest a fallow suppression comment instead of deletion.
+- Output ONLY the Markdown comment body, nothing else.`;
 
-      - name: Fallow audit (JSON for agent)
-        if: always() # run even if blocking checks failed, so the comment explains why
-        run: |
-          npx fallow audit \
-            --changed-since "origin/${{ github.base_ref }}" \
-            --format json > fallow-report.json || true
-          npx fallow dupes \
-            --changed-since "origin/${{ github.base_ref }}" \
-            --format json > fallow-dupes.json || true
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 2000,
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: `Base branch: ${BASE_REF}\nHead SHA: ${HEAD_SHA}\n` +
+            (blockFlags.length ? `\nAdditional BLOCKING flags from CI:\n- ${blockFlags.join("\n- ")}\n` : "") +
+            `\nFallow audit JSON:\n\`\`\`json\n${reportText}\n\`\`\`` +
+            `\n\nFallow dupes JSON (changed files vs whole repo):\n\`\`\`json\n${dupesText}\n\`\`\``,
+        },
+      ],
+    }),
+  });
 
-      - name: AI agent — analyze & comment on PR
-        if: always()
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          CONSOLE_FAIL: ${{ env.CONSOLE_FAIL }}
-          UNUSED_IMPORT_FAIL: ${{ env.UNUSED_IMPORT_FAIL }}
-        run: node scripts/fallow-agent.mjs
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Groq API ${res.status}: ${body.slice(0, 500)}`);
+  }
 
-      # Surface the grep-based failures as a job failure at the end,
-      # after the agent has had a chance to comment.
-      - name: Enforce console/import blocks
-        if: env.CONSOLE_FAIL == 'true' || env.UNUSED_IMPORT_FAIL == 'true'
-        run: |
-          echo "Blocking issues found (console logs and/or unused imports). See the agent comment."
-          exit 1
+  const data = await res.json();
+  const text = (data.choices?.[0]?.message?.content ?? "").trim();
+
+  return `### 🧹 Fallow AI Review\n\n${text}`;
+}
+
+// ---------------------------------------------------------------------------
+// 3. Upsert a single PR comment (edit on re-runs instead of spamming)
+// ---------------------------------------------------------------------------
+const gh = (path, init = {}) =>
+  fetch(`https://api.github.com${path}`, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${GITHUB_TOKEN}`,
+      accept: "application/vnd.github+json",
+      "content-type": "application/json",
+      ...init.headers,
+    },
+  });
+
+async function upsertComment(body) {
+  const full = `${COMMENT_MARKER}\n${body}\n\n<sub>Generated by the Fallow AI agent on \`${HEAD_SHA.slice(0, 7)}\`</sub>`;
+
+  // Find existing agent comment
+  const listRes = await gh(`/repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100`);
+  const comments = listRes.ok ? await listRes.json() : [];
+  const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
+
+  if (existing) {
+    const r = await gh(`/repos/${REPO}/issues/comments/${existing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body: full }),
+    });
+    if (!r.ok) throw new Error(`Failed to update comment: ${r.status}`);
+    console.log("Updated existing agent comment.");
+  } else {
+    const r = await gh(`/repos/${REPO}/issues/${PR_NUMBER}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body: full }),
+    });
+    if (!r.ok) throw new Error(`Failed to create comment: ${r.status}`);
+    console.log("Posted new agent comment.");
+  }
+}
+
+// ---------------------------------------------------------------------------
+try {
+  const review = await generateReview();
+  await upsertComment(review);
+} catch (err) {
+  console.error("Agent failed:", err.message);
+  process.exit(0); // never block the PR on agent failure
+}
