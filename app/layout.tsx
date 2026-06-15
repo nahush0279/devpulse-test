@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import type { ComponentProps } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -11,6 +12,12 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+console.log("test comment.");
+
+console.log("test comment.");
+
+console.log("test comment.");
 
 export const metadata: Metadata = {
   title: "DevPulse Test",
