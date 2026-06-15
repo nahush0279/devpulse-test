@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # needed so fallow can diff against the base branch
+          fetch-depth: 0 # full history so fallow/git can find the merge base
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Install dependencies
         run: npm ci
@@ -34,11 +34,11 @@ jobs:
       # 1. console.log / unused-imports added by THIS PR (added lines only)
       - name: Block new console logs & unused imports
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1 || true
+          git fetch origin "${{ github.base_ref }}" || true
           BASE="origin/${{ github.base_ref }}"
 
           # --- console statements in added lines of JS/TS files ---
-          ADDED_CONSOLE=$(git diff "$BASE"...HEAD --unified=0 -- '*.js' '*.jsx' '*.ts' '*.tsx' \
+          ADDED_CONSOLE=$(git diff "$BASE" HEAD --unified=0 -- '*.js' '*.jsx' '*.ts' '*.tsx' \
             | grep -E '^\+' | grep -vE '^\+\+\+' \
             | grep -E 'console\.(log|debug|info|warn|error)\(' \
             | grep -v 'eslint-disable' || true)
@@ -50,7 +50,7 @@ jobs:
           fi
 
           # --- unused imports (file-local) via ESLint on changed files only ---
-          CHANGED=$(git diff "$BASE"...HEAD --name-only --diff-filter=ACMR -- '*.js' '*.jsx' '*.ts' '*.tsx')
+          CHANGED=$(git diff "$BASE" HEAD --name-only --diff-filter=ACMR -- '*.js' '*.jsx' '*.ts' '*.tsx')
           if [ -n "$CHANGED" ]; then
             npx eslint --no-eslintrc --parser-options=ecmaVersion:latest,sourceType:module \
               --rule '{"no-unused-vars": ["error", {"args":"none","varsIgnorePattern":"^_"}]}' \
