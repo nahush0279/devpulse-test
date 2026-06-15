@@ -15,7 +15,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-console.log("test comment.");
 
 console.log("test comment.");
 
