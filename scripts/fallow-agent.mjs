@@ -1,7 +1,8 @@
 // scripts/fallow-agent.mjs
-// AI review agent: Fallow (deterministic facts) -> Groq LLM (judgment) -> PR comment.
-// Requires: GROQ_API_KEY, GITHUB_TOKEN, PR_NUMBER, REPO env vars.
-// Node 20+ (uses global fetch). No external dependencies.
+// AI review agent: Fallow (deterministic file+line facts) -> Groq (prose) ->
+// GitHub Pull Request REVIEW with inline comments (CodeRabbit-style).
+// Requires: GROQ_API_KEY, GITHUB_TOKEN, PR_NUMBER, REPO, HEAD_SHA env vars.
+// Node 20+ (global fetch). No external dependencies.
 
 import { readFileSync } from "node:fs";
 
@@ -12,144 +13,282 @@ const {
   REPO,
   BASE_REF = "main",
   HEAD_SHA = "",
+  CONSOLE_FAIL,
+  UNUSED_IMPORT_FAIL,
 } = process.env;
 
 const COMMENT_MARKER = "<!-- fallow-ai-agent -->";
-// Groq model — fast and free-tier friendly. Swap if you prefer another Groq-hosted model.
 const MODEL = "llama-3.3-70b-versatile";
 
 // ---------------------------------------------------------------------------
-// 1. Load the fallow report
+// 1. Load fallow report
 // ---------------------------------------------------------------------------
 let report;
 try {
   report = JSON.parse(readFileSync("fallow-report.json", "utf8"));
 } catch (err) {
-  console.error("Could not read/parse fallow-report.json:", err.message);
-  process.exit(0); // don't fail the PR because the agent broke
+  console.error("Could not read fallow-report.json:", err.message);
+  process.exit(0);
 }
 
+const dc = report.dead_code ?? {};
+const dup = report.duplication ?? {};
+const cx = report.complexity ?? {};
 const verdict = report.verdict ?? "unknown";
 
-// If fallow found nothing, post (or update to) a short all-clear and exit.
-const hasFindings =
-  JSON.stringify(report).length > 2 && verdict !== "pass"
-    ? true
-    : countIssues(report) > 0;
-
-function countIssues(r) {
-  let n = 0;
-  const walk = (v) => {
-    if (Array.isArray(v)) {
-      for (const item of v) {
-        if (
-          item &&
-          typeof item === "object" &&
-          ("file" in item || "kind" in item || "type" in item)
-        )
-          n++;
-        walk(item);
-      }
-    } else if (v && typeof v === "object") {
-      Object.values(v).forEach(walk);
-    }
-  };
-  walk(r);
-  return n;
+// ---------------------------------------------------------------------------
+// 2. Flatten every finding into a common shape
+// ---------------------------------------------------------------------------
+function firstAction(actions = []) {
+  const a = actions.find((x) => x.auto_fixable) ?? actions[0];
+  if (!a) return "";
+  const auto = a.auto_fixable ? " (auto-fixable via `npx fallow fix`)" : "";
+  return `${a.description}${auto}`;
 }
 
-// ---------------------------------------------------------------------------
-// 2. Ask the LLM to turn raw findings into a useful review
-// ---------------------------------------------------------------------------
-async function generateReview() {
-  if (!hasFindings) {
-    return `### ✅ Fallow AI Review — clean\n\nNo new dead code, unused dependencies, or circular dependencies introduced by this PR. Nice.`;
-  }
+const findings = [];
 
-  // Keep the prompt within budget — truncate huge reports.
-  const reportText = JSON.stringify(report, null, 1).slice(0, 50_000);
-  let dupesText = "{}";
-  try {
-    dupesText = JSON.stringify(
-      JSON.parse(readFileSync("fallow-dupes.json", "utf8")),
-      null,
-      1,
-    ).slice(0, 20_000);
-  } catch {
-    /* dupes report optional */
-  }
-
-  const blockFlags = [
-    process.env.CONSOLE_FAIL === "true" &&
-      "console statements were added in this PR (see CI log for lines)",
-    process.env.UNUSED_IMPORT_FAIL === "true" &&
-      "file-local unused imports/variables were found in changed files (see ESLint output in CI log)",
-  ].filter(Boolean);
-
-  const systemPrompt = `You are a senior code-review agent for a TypeScript/JavaScript repository.
-You receive JSON output from "fallow audit" and "fallow dupes" run against a pull request.
-The audit report distinguishes findings INTRODUCED by this PR from PRE-EXISTING ones.
-
-This repo enforces a two-tier policy:
-- BLOCKING (merge is blocked until fixed): EVERYTHING unused — files, exports, types, dependencies,
-  enum/class members — plus unresolved/unlisted imports, duplicate exports, console statements,
-  and file-local unused imports.
-- ADVISORY (comment only, never blocks): code duplication and circular dependencies.
-
-Write a GitHub PR review comment in Markdown. Rules:
-- Start with a one-line verdict summary (audit verdict is "${verdict}").
-- Section 1: "⛔ Blocking — must fix before merge" — every BLOCKING finding introduced by this PR:
-  \`file:line\` — what it is, the concrete fix (use the per-issue "actions" array when present;
-  mention if auto-fixable via \`npx fallow fix\`). If console-statement or unused-import flags
-  are set in the user message, include them here.
-- Section 2: "💡 Advisory — worth a look, not blocking" — duplication and circular-dependency
-  findings. For duplicates, name BOTH locations and suggest where the shared logic should live.
-  For cycles, show the cycle path and the cheapest edge to break.
-- Section 3: "📋 Pre-existing (not your fault, FYI)" — collapse into a <details> block, max 10 items.
-- Be concise and specific. No generic advice, no praise filler, no preamble.
-- If a finding looks like a likely false positive (e.g. framework convention export, dynamic import
-  target), say so and suggest a fallow suppression comment instead of deletion.
-- Output ONLY the Markdown comment body, nothing else.`;
-
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 2000,
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content:
-            `Base branch: ${BASE_REF}\nHead SHA: ${HEAD_SHA}\n` +
-            (blockFlags.length
-              ? `\nAdditional BLOCKING flags from CI:\n- ${blockFlags.join("\n- ")}\n`
-              : "") +
-            `\nFallow audit JSON:\n\`\`\`json\n${reportText}\n\`\`\`` +
-            `\n\nFallow dupes JSON (changed files vs whole repo):\n\`\`\`json\n${dupesText}\n\`\`\``,
-        },
-      ],
-    }),
+for (const f of dc.unused_files ?? []) {
+  findings.push({
+    category: "unused-file",
+    label: "Unused file",
+    path: f.path,
+    line: null,
+    blocking: true,
+    introduced: f.introduced,
+    detail: "This file is never imported anywhere.",
+    fix: firstAction(f.actions),
+    inline: false,
   });
+}
+for (const e of dc.unused_exports ?? []) {
+  findings.push({
+    category: "unused-export",
+    label: "Unused export",
+    path: e.path,
+    line: e.line,
+    blocking: true,
+    introduced: e.introduced,
+    detail: `Export \`${e.export_name}\` is never used outside this file.`,
+    fix: firstAction(e.actions),
+    inline: true,
+  });
+}
+for (const t of dc.unused_types ?? []) {
+  findings.push({
+    category: "unused-type",
+    label: "Unused type",
+    path: t.path,
+    line: t.line,
+    blocking: true,
+    introduced: t.introduced,
+    detail: `Type \`${t.type_name ?? t.export_name ?? ""}\` is never referenced.`,
+    fix: firstAction(t.actions),
+    inline: t.line != null,
+  });
+}
+for (const d of dc.unused_dependencies ?? []) {
+  findings.push({
+    category: "unused-dependency",
+    label: "Unused dependency",
+    path: d.path,
+    line: d.line,
+    blocking: true,
+    introduced: d.introduced,
+    detail: `\`${d.package_name}\` is listed in ${d.location} but never imported.`,
+    fix: firstAction(d.actions),
+    inline: true,
+  });
+}
+for (const u of dc.unresolved_imports ?? []) {
+  findings.push({
+    category: "unresolved-import",
+    label: "Unresolved import",
+    path: u.path,
+    line: u.line,
+    blocking: true,
+    introduced: u.introduced,
+    detail: u.specifier
+      ? `Cannot resolve \`${u.specifier}\`.`
+      : "Unresolved import.",
+    fix: firstAction(u.actions),
+    inline: u.line != null,
+  });
+}
+for (const u of dc.unlisted_dependencies ?? []) {
+  findings.push({
+    category: "unlisted-dependency",
+    label: "Unlisted dependency",
+    path: u.path,
+    line: u.line,
+    blocking: true,
+    introduced: u.introduced,
+    detail: u.package_name
+      ? `\`${u.package_name}\` is imported but not in package.json.`
+      : "Unlisted dependency.",
+    fix: firstAction(u.actions),
+    inline: u.line != null,
+  });
+}
+for (const de of dc.duplicate_exports ?? []) {
+  const loc = de.locations?.[0];
+  const others = (de.locations ?? [])
+    .slice(1)
+    .map((l) => `\`${l.path}:${l.line}\``)
+    .join(", ");
+  findings.push({
+    category: "duplicate-export",
+    label: "Duplicate export",
+    path: loc?.path,
+    line: loc?.line,
+    blocking: true,
+    introduced: de.introduced,
+    detail: `\`${de.export_name}\` is also exported from ${others || "another location"}.`,
+    fix: firstAction(de.actions),
+    inline: loc?.line != null,
+  });
+}
+for (const c of dc.circular_dependencies ?? []) {
+  const edge = c.edges?.[0] ?? {};
+  const cyclePath = (c.files ?? []).map((f) => f.split("/").pop()).join(" -> ");
+  findings.push({
+    category: "circular-dependency",
+    label: "Circular dependency",
+    path: edge.path,
+    line: edge.line,
+    blocking: false,
+    introduced: c.introduced,
+    detail: `Import cycle: ${cyclePath}.`,
+    fix: firstAction(c.actions),
+    inline: edge.line != null,
+  });
+}
+for (const g of dup.clone_groups ?? []) {
+  const inst = g.instances?.[0] ?? {};
+  const others = (g.instances ?? [])
+    .slice(1)
+    .map((i) => `\`${i.file}:${i.start_line}\``)
+    .join(", ");
+  findings.push({
+    category: "code-duplication",
+    label: "Code duplication",
+    path: inst.file,
+    line: inst.start_line,
+    blocking: false,
+    introduced: g.introduced,
+    detail: `${g.line_count} duplicated lines, also at ${others || "another location"}. Consider extracting a shared function.`,
+    fix: firstAction(g.actions),
+    inline: inst.start_line != null,
+  });
+}
+for (const f of cx.findings ?? []) {
+  findings.push({
+    category: "complexity",
+    label: `Complexity (${f.severity})`,
+    path: f.path,
+    line: f.line,
+    blocking: false,
+    introduced: f.introduced,
+    detail: `\`${f.name}\` has cyclomatic ${f.cyclomatic}, CRAP ${f.crap}.`,
+    fix: firstAction(f.actions),
+    inline: f.line != null,
+  });
+}
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Groq API ${res.status}: ${body.slice(0, 500)}`);
+const introduced = findings.filter((f) => f.introduced);
+const inlineFindings = introduced.filter((f) => f.inline && f.path && f.line);
+const summaryOnly = introduced.filter((f) => !f.inline || !f.line);
+
+// ---------------------------------------------------------------------------
+// 3. Optionally enrich each inline finding with one short Groq sentence
+// ---------------------------------------------------------------------------
+async function groqEnrich(f) {
+  if (!GROQ_API_KEY) return null;
+  try {
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 120,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a terse senior code reviewer. Given one static-analysis finding, write ONE sentence (max 25 words) explaining the concrete risk or fix. No preamble, no markdown headers.",
+          },
+          {
+            role: "user",
+            content: `${f.label} in ${f.path}:${f.line}. ${f.detail} Suggested fix: ${f.fix}`,
+          },
+        ],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.choices?.[0]?.message?.content ?? "").trim() || null;
+  } catch {
+    return null;
   }
-
-  const data = await res.json();
-  const text = (data.choices?.[0]?.message?.content ?? "").trim();
-
-  return `### 🧹 Fallow AI Review\n\n${text}`;
 }
 
 // ---------------------------------------------------------------------------
-// 3. Upsert a single PR comment (edit on re-runs instead of spamming)
+// 4. Build review payload
+// ---------------------------------------------------------------------------
+function emoji(blocking) {
+  return blocking ? "⛔" : "💡";
+}
+
+async function buildReviewComments() {
+  const comments = [];
+  for (const f of inlineFindings) {
+    const extra = await groqEnrich(f);
+    const body =
+      `${emoji(f.blocking)} **${f.label}** ${f.blocking ? "(blocking)" : "(advisory)"}\n\n` +
+      `${f.detail}\n\n` +
+      (extra ? `${extra}\n\n` : "") +
+      (f.fix ? `**Fix:** ${f.fix}` : "");
+    comments.push({ path: f.path, line: f.line, side: "RIGHT", body });
+  }
+  return comments;
+}
+
+function buildSummaryBody() {
+  const blk = introduced.filter((f) => f.blocking).length;
+  const adv = introduced.filter((f) => !f.blocking).length;
+  let body = `${COMMENT_MARKER}\n### Fallow AI Review\n\n`;
+  body += `**Verdict:** \`${verdict}\` - ${blk} blocking, ${adv} advisory finding(s) introduced by this PR.\n\n`;
+
+  if (CONSOLE_FAIL === "true")
+    body += `- BLOCKING: Console statements were added (see CI log).\n`;
+  if (UNUSED_IMPORT_FAIL === "true")
+    body += `- BLOCKING: File-local unused imports found (see ESLint output in CI log).\n`;
+
+  if (summaryOnly.length) {
+    body += `\n<details><summary>Findings without a line anchor (${summaryOnly.length})</summary>\n\n`;
+    for (const f of summaryOnly) {
+      body += `- ${emoji(f.blocking)} **${f.label}** - \`${f.path}\`${f.line ? ":" + f.line : ""} - ${f.detail} ${f.fix ? "_Fix: " + f.fix + "_" : ""}\n`;
+    }
+    body += `\n</details>\n`;
+  }
+
+  if (
+    !introduced.length &&
+    CONSOLE_FAIL !== "true" &&
+    UNUSED_IMPORT_FAIL !== "true"
+  ) {
+    body += `No new issues introduced by this PR.\n`;
+  }
+  body += `\n<sub>Generated by the Fallow AI agent on \`${HEAD_SHA.slice(0, 7)}\`</sub>`;
+  return body;
+}
+
+// ---------------------------------------------------------------------------
+// 5. Post the review (dismiss previous agent reviews first)
 // ---------------------------------------------------------------------------
 const gh = (path, init = {}) =>
   fetch(`https://api.github.com${path}`, {
@@ -162,38 +301,70 @@ const gh = (path, init = {}) =>
     },
   });
 
-async function upsertComment(body) {
-  const full = `${COMMENT_MARKER}\n${body}\n\n<sub>Generated by the Fallow AI agent on \`${HEAD_SHA.slice(0, 7)}\`</sub>`;
-
-  // Find existing agent comment
-  const listRes = await gh(
-    `/repos/${REPO}/issues/${PR_NUMBER}/comments?per_page=100`,
-  );
-  const comments = listRes.ok ? await listRes.json() : [];
-  const existing = comments.find((c) => c.body?.includes(COMMENT_MARKER));
-
-  if (existing) {
-    const r = await gh(`/repos/${REPO}/issues/comments/${existing.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ body: full }),
-    });
-    if (!r.ok) throw new Error(`Failed to update comment: ${r.status}`);
-    console.log("Updated existing agent comment.");
-  } else {
-    const r = await gh(`/repos/${REPO}/issues/${PR_NUMBER}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ body: full }),
-    });
-    if (!r.ok) throw new Error(`Failed to create comment: ${r.status}`);
-    console.log("Posted new agent comment.");
+async function dismissOldReviews() {
+  const r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/reviews`);
+  if (!r.ok) return;
+  const reviews = await r.json();
+  for (const rev of reviews) {
+    if (rev.body?.includes(COMMENT_MARKER) && rev.state !== "DISMISSED") {
+      await gh(
+        `/repos/${REPO}/pulls/${PR_NUMBER}/reviews/${rev.id}/dismissals`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            message: "Superseded by newer Fallow review.",
+            event: "DISMISS",
+          }),
+        },
+      ).catch(() => {});
+    }
   }
+}
+
+async function postReview() {
+  const comments = await buildReviewComments();
+  const bodyText = buildSummaryBody();
+
+  const payload = {
+    commit_id: HEAD_SHA,
+    body: bodyText,
+    event: "COMMENT", // never APPROVE/REQUEST_CHANGES; the gate step controls blocking
+    comments,
+  };
+
+  let r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/reviews`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  if (r.status === 422) {
+    const errText = await r.text();
+    console.error(
+      "Inline review rejected (likely a line not in diff). Falling back to summary. Detail:",
+      errText.slice(0, 300),
+    );
+    r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/reviews`, {
+      method: "POST",
+      body: JSON.stringify({
+        commit_id: HEAD_SHA,
+        body: bodyText,
+        event: "COMMENT",
+      }),
+    });
+  }
+
+  if (!r.ok)
+    throw new Error(
+      `Review POST failed: ${r.status} ${(await r.text()).slice(0, 300)}`,
+    );
+  console.log(`Posted review with ${comments.length} inline comment(s).`);
 }
 
 // ---------------------------------------------------------------------------
 try {
-  const review = await generateReview();
-  await upsertComment(review);
+  await dismissOldReviews();
+  await postReview();
 } catch (err) {
   console.error("Agent failed:", err.message);
-  process.exit(0); // never block the PR on agent failure
+  process.exit(0);
 }
