@@ -28,6 +28,7 @@ const SKIP_GROQ = new Set([
   "unused-dependency",
   "unresolved-import",
   "unlisted-dependency",
+  "console",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -257,6 +258,34 @@ for (const f of cx.findings ?? []) {
   });
 }
 
+// --- console statements (from the workflow's console-hits.tsv) ---
+try {
+  const tsv = readFileSync("console-hits.tsv", "utf8").trim();
+  if (tsv) {
+    for (const row of tsv.split("\n")) {
+      const [path, lineStr] = row.split("\t");
+      const line = parseInt(lineStr, 10);
+      if (path && Number.isInteger(line)) {
+        findings.push({
+          category: "console",
+          label: "Console statement",
+          path,
+          line,
+          blocking: true,
+          introduced: true,
+          detail:
+            "Console statements should not ship to production. Remove it or use the project logger.",
+          fix: "Remove the console call, or add `// eslint-disable-next-line no-console` if intentional.",
+          suggestion: "```suggestion\n```", // one-click delete the line
+          inline: true,
+        });
+      }
+    }
+  }
+} catch {
+  /* no console hits file -> nothing to add */
+}
+
 const introduced = findings.filter((f) => f.introduced);
 const inlineFindings = introduced.filter((f) => f.inline && f.path && f.line);
 const summaryOnly = introduced.filter((f) => !f.inline || !f.line);
@@ -347,10 +376,14 @@ function buildSummaryBody() {
   const summary = categorySummary();
   if (summary) body += summary + "\n";
 
-  if (CONSOLE_FAIL === "true")
+  if (
+    CONSOLE_FAIL === "true" &&
+    !introduced.some((f) => f.category === "console")
+  ) {
     body += `- ⛔ **Console statements** were added (see CI log).\n`;
+  }
   if (UNUSED_IMPORT_FAIL === "true")
-    body += `- ⛔ **File-local unused imports** found (see ESLint output in CI log).\n`;
+    body += `- ⛔ **File-local unused imports/locals** detected by tsc (see CI log).\n`;
 
   if (summaryOnly.length) {
     body += `\n<details><summary>Findings without a line anchor (${summaryOnly.length})</summary>\n\n`;
