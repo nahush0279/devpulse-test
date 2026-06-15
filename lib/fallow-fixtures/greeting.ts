@@ -1,3 +1,6 @@
+import { clsx } from "clsx";
+import type { Metadata } from "next";
+
 export function getGreeting(name: string): string {
   return `Hello, ${name}!`;
 }

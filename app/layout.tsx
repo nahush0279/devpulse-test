@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import type { Route } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cn } from "@/lib/utils";
 import "./globals.css";
 
 const geistSans = Geist({
