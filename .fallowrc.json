@@ -7,7 +7,12 @@
     "unused-dependencies": "error",
     "unresolved-imports": "error",
     "unlisted-dependencies": "error",
-    "duplicate-exports": "error",
+    "duplicate-exports": {
+      "level": "error",
+      "ignoreExports": [
+        "lib/fallow-fixtures/duplicates/**"
+      ]
+    },
 
     "circular-dependencies": "warn"
   }

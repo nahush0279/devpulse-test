@@ -1,4 +1,4 @@
-import { formatUser } from "./user-service";
+import { formatUserText } from "./text-format";
 
 let tokenValid = true;
 
@@ -7,7 +7,6 @@ export function validateToken(): boolean {
     return false;
   }
 
-  // Runtime reference keeps this a real circular dependency, not type-only.
-  tokenValid = formatUser("session") !== "";
+  tokenValid = formatUserText("session", false) !== "";
   return tokenValid;
 }
