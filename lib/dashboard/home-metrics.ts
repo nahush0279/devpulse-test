@@ -2,10 +2,7 @@ import type { ReadonlyURLSearchParams } from "next/navigation";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import type { Metadata } from "next";
-import type {
-  CustomerSummary,
-  PendingInvitation,
-} from "@/lib/customers/types";
+import type { CustomerSummary } from "@/lib/customers/types";
 import { normalizeLineItems } from "@/lib/billing/normalize-line-items";
 import { prepareReportRows } from "@/lib/reports/rollup-helpers";
 import { enqueueDigest } from "@/lib/notifications/delivery-queue";

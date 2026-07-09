@@ -10,5 +10,11 @@
     "duplicate-exports": "error",
 
     "circular-dependencies": "warn"
-  }
+  },
+  "ignoreExports": [
+    "lib/fallow-fixtures/duplicates/shipping-a.ts",
+    "lib/fallow-fixtures/duplicates/shipping-b.ts",
+    "lib/fallow-fixtures/duplicates/discount-a.ts",
+    "lib/fallow-fixtures/duplicates/discount-b.ts"
+  ]
 }

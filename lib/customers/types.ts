@@ -3,19 +3,19 @@ export type CustomerSummary = {
   displayName: string;
 };
 
-export type PendingInvitation = {
+type PendingInvitation = {
   email: string;
   role: "admin" | "member" | "viewer";
   sentAt: string;
 };
 
-export type StaleCacheEntry = {
+type StaleCacheEntry = {
   key: string;
   fetchedAt: number;
   ttlSeconds: number;
 };
 
-export interface WorkspaceMigrationState {
+interface WorkspaceMigrationState {
   sourceId: string;
   targetId: string;
   phase: "pending" | "running" | "complete";

@@ -1,8 +1,6 @@
-import { countAvailableUnits } from "./inventory-service";
-
-const shelves = new Map<string, number>();
+import { getReservedQuantity, setReservedQuantity, clampQuantity } from "./shelf-store";
 
 export function reserveShelfSpace(sku: string): void {
-  const current = shelves.get(sku) ?? countAvailableUnits(sku, 1);
-  shelves.set(sku, current);
+  const current = getReservedQuantity(sku) ?? clampQuantity(1);
+  setReservedQuantity(sku, current);
 }
