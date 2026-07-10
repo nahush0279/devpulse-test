@@ -1,24 +1,25 @@
-export interface ProductListing {
-  sku: string;
-  title: string;
+export type Product = {
+  id: string;
+  name: string;
   price: number;
-  category: string;
-}
+};
 
 type ArchivedUserRecord = {
   userId: string;
   archivedAt: Date;
-  reason: string;
 };
 
 type LegacySessionToken = {
   token: string;
   expiresAt: Date;
-  version: number;
 };
 
 type DeprecatedAuditEntry = {
+  id: string;
   action: string;
-  timestamp: Date;
-  userId: string;
+};
+
+export type Order = {
+  orderId: string;
+  items: string[];
 };

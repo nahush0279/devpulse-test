@@ -1,24 +1,27 @@
-export interface CustomerProfile {
+export type CustomerProfile = {
   id: string;
   name: string;
   email: string;
-  createdAt: Date;
-}
+};
 
 type PendingInvitation = {
   email: string;
-  role: "admin" | "member";
   invitedAt: Date;
 };
 
 type StaleCacheEntry = {
   key: string;
   lastAccessed: Date;
-  ttl: number;
 };
 
 type WorkspaceMigrationState = {
-  from: string;
-  to: string;
-  progress: number;
+  workspaceId: string;
+  fromPlan: string;
+  toPlan: string;
+};
+
+export type BillingCycle = {
+  start: Date;
+  end: Date;
+  amount: number;
 };

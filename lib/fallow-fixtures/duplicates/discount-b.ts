@@ -1,1 +1,3 @@
-// Duplicate removed - see discount-a.ts for computeDiscountedPrice
+export function computeBulkDiscountedPrice(price: number, discount: number): number {
+  return price * (1 - discount * 2);
+}

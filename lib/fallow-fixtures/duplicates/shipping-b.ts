@@ -1,1 +1,3 @@
-// Duplicate removed - see shipping-a.ts for calculateShippingCost
+export function calculatePriorityShippingCost(weight: number, distance: number): number {
+  return weight * distance * 0.15;
+}

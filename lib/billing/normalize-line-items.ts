@@ -1,31 +1,15 @@
-import { normalizeCurrency, computeAbsoluteAmount } from "../shared/numeric-helpers";
+import { convertCurrency } from './currency-utils';
 
-export interface LineItem {
+type LineItem = {
   id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  total: number;
+  amount: number;
   currency: string;
-}
+};
 
-export function normalizeLineItems(items: LineItem[]) {
-  return items.map((item) => {
-    const currency = normalizeCurrency(item.currency);
-    const total = computeAbsoluteAmount(item.quantity, item.unitPrice);
-    
-    return {
-      ...item,
-      currency,
-      total,
-    };
-  });
-}
-
-export function calculateSubtotal(items: LineItem[]) {
-  return items.reduce((sum, item) => {
-    const currency = normalizeCurrency(item.currency);
-    const total = computeAbsoluteAmount(item.quantity, item.unitPrice);
-    return sum + total;
-  }, 0);
+export function normalizeLineItems(items: LineItem[], targetCurrency: string): LineItem[] {
+  return items.map((item) => ({
+    ...item,
+    amount: convertCurrency(item.amount, item.currency, targetCurrency),
+    currency: targetCurrency,
+  }));
 }

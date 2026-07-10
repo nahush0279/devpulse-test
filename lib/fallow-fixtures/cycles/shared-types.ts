@@ -1,9 +1,1 @@
-export interface StockItem {
-  itemId: string;
-  quantity: number;
-}
-
-export interface WarehouseAllocation {
-  itemId: string;
-  spaceRequired: number;
-}
+export const WAREHOUSE_CAPACITY = 100;

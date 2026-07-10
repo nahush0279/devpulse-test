@@ -1,7 +1,5 @@
-export function getWarehouseCapacity(productId: string) {
-  return 100;
-}
+import { WAREHOUSE_CAPACITY } from './shared-types';
 
-export function getWarehouseLocation(productId: string) {
-  return `WH-${productId}`;
+export function getWarehouseCapacity(): number {
+  return WAREHOUSE_CAPACITY;
 }

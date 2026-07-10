@@ -1,29 +1,15 @@
-import { normalizeCurrency, computeAbsoluteAmount } from "../shared/numeric-helpers";
+import { convertCurrency } from '../billing/currency-utils';
 
-export interface ReportRow {
-  label: string;
+type ReportRow = {
+  id: string;
   value: number;
-  currency: string;
-  quantity: number;
-}
+  unit: string;
+};
 
-export function rollupReportRows(rows: ReportRow[]) {
-  return rows.map((row) => {
-    const currency = normalizeCurrency(row.currency);
-    const value = computeAbsoluteAmount(row.quantity, row.value);
-    
-    return {
-      ...row,
-      currency,
-      value,
-    };
-  });
-}
-
-export function computeGrandTotal(rows: ReportRow[]) {
-  return rows.reduce((sum, row) => {
-    const currency = normalizeCurrency(row.currency);
-    const value = computeAbsoluteAmount(row.quantity, row.value);
-    return sum + value;
-  }, 0);
+export function rollupReport(rows: ReportRow[], targetUnit: string): ReportRow[] {
+  return rows.map((row) => ({
+    ...row,
+    value: convertCurrency(row.value, row.unit, targetUnit),
+    unit: targetUnit,
+  }));
 }
