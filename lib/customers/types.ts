@@ -2,24 +2,23 @@ export interface CustomerProfile {
   id: string;
   name: string;
   email: string;
-  createdAt: Date;
+  tier: "standard" | "premium" | "enterprise";
 }
 
-type PendingInvitation = {
+interface PendingInvitation {
   email: string;
-  role: string;
+  role: "admin" | "member";
   expiresAt: Date;
-};
+}
 
-type StaleCacheEntry = {
+interface StaleCacheEntry {
   key: string;
   lastAccessed: Date;
   ttl: number;
-};
+}
 
-type WorkspaceMigrationState = {
-  workspaceId: string;
+interface WorkspaceMigrationState {
   fromVersion: number;
   toVersion: number;
-  status: 'pending' | 'in-progress' | 'complete' | 'failed';
-};
+  progress: number;
+}

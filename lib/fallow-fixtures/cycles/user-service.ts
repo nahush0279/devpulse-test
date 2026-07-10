@@ -1,3 +1,3 @@
-export function getUser(userId: string): string {
-  return `user-${userId}`;
+export function getUser(id: string) {
+  return { id, name: `User ${id}` };
 }

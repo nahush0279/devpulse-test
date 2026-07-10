@@ -1,30 +1,24 @@
-export interface Product {
-  id: string;
-  name: string;
-  price: number;
-}
+export type ProductID = string;
+export type SKU = string;
+export type CategorySlug = string;
+export type TaxRateID = number;
+export type SupplierCode = string;
+export type ReviewScore = number;
 
-export interface InventoryItem {
-  productId: string;
-  quantity: number;
-  warehouse: string;
-}
-
-type ArchivedUserRecord = {
+interface ArchivedUserRecord {
   userId: string;
   archivedAt: Date;
   reason: string;
-};
+}
 
-type LegacySessionToken = {
+interface LegacySessionToken {
   token: string;
+  issuedAt: Date;
   expiresAt: Date;
-  version: number;
-};
+}
 
-type DeprecatedAuditEntry = {
+interface DeprecatedAuditEntry {
   action: string;
-  userId: string;
+  performedBy: string;
   timestamp: Date;
-  details: string;
-};
+}
