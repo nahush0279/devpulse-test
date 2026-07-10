@@ -1,3 +1,7 @@
-export function getWarehouse(id: string) {
-  return { id, capacity: 1000 };
+import { checkInventoryAvailability } from './inventory-service';
+import { getBaseCapacity } from './shared-warehouse-logic';
+
+export function getWarehouseCapacity(warehouseId: string): number {
+  const itemAvailable = checkInventoryAvailability('any');
+  return itemAvailable ? getBaseCapacity() : 0;
 }

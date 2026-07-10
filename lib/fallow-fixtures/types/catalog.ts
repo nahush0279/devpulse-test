@@ -1,23 +1,27 @@
-export interface Product {
+export interface ProductListing {
+  id: string;
   sku: string;
-  name: string;
+  title: string;
   price: number;
+  category: string;
+  inStock: boolean;
 }
 
-interface ArchivedUserRecord {
-  id: string;
-  archivedAt: string;
-}
+type ArchivedUserRecord = {
+  userId: string;
+  archivedAt: Date;
+  reason: string;
+};
 
-interface LegacySessionToken {
+type LegacySessionToken = {
   token: string;
-  expiresAt: number;
-}
+  expiresAt: Date;
+  userId: string;
+};
 
-interface DeprecatedAuditEntry {
-  id: string;
+type DeprecatedAuditEntry = {
   action: string;
-  timestamp: string;
-}
-
-export const TAX_RATE = 0.08;
+  performedBy: string;
+  timestamp: Date;
+  details: Record<string, unknown>;
+};

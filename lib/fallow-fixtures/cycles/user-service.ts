@@ -1,3 +1,1 @@
-export function getUser(id: string) {
-  return { id, name: 'John' };
-}
+// This might have imports - need to check

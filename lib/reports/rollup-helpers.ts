@@ -1,8 +1,10 @@
-import { computeLineItemsTotal } from '../billing/compute-line-items';
+import { formatCurrency } from '../shared/format-utils';
 
-export function rollupLineItems(items: any[]) {
-  // Roll up line items for report generation
-  const total = computeLineItemsTotal(items);
-  const count = items.length;
-  return { items, total, count };
+export function calculateTotals(items: { total: number }[]): number {
+  return items.reduce((sum, item) => sum + item.total, 0);
+}
+
+export function generateReportSummary(items: { total: number }[]): string {
+  const grandTotal = calculateTotals(items);
+  return `Total: ${formatCurrency(grandTotal)}`;
 }

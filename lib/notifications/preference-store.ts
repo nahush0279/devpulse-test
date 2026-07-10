@@ -1,3 +1,6 @@
-export function getPreferences(userId: string) {
-  return { email: true, sms: false };
+import { logNotification } from './shared-notification-utils';
+
+export function getPreference(userId: string): string {
+  logNotification(userId, 'preference-check');
+  return 'email';
 }

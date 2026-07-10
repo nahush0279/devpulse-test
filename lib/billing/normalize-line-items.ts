@@ -1,17 +1,22 @@
-import { computeLineItemsTotal } from './compute-line-items';
+import { formatCurrency } from '../shared/format-utils';
 
 export interface LineItem {
-  item: string;
+  id: string;
+  description: string;
   quantity: number;
   unitPrice: number;
+  total: number;
 }
 
-export function normalizeLineItems(items: LineItem[]) {
-  // Normalise all line items to a standard format
-  const normalized = items.map((item) => ({
+export function normalizeLineItems(items: LineItem[]): LineItem[] {
+  return items.map(item => ({
     ...item,
-    total: item.quantity * item.unitPrice,
+    description: item.description.trim(),
+    total: item.quantity * item.unitPrice
   }));
-  const total = computeLineItemsTotal(items);
-  return { items: normalized, total };
+}
+
+export function getFormattedTotal(items: LineItem[]): string {
+  const total = items.reduce((sum, item) => sum + item.total, 0);
+  return formatCurrency(total);
 }

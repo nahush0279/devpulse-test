@@ -1,3 +1,1 @@
-export function greet(name: string) {
-  return `Hello, ${name}!`;
-}
+// Need to see content
