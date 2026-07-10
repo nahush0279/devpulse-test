@@ -1,10 +1,9 @@
 import { getPreference } from './preference-store';
+import { sendNotification } from './shared-notification-utils';
 
-export function enqueueNotification(userId: string, message: string): void {
+export function enqueueDelivery(userId: string, message: string): void {
   const pref = getPreference(userId);
-  if (pref === 'email') {
-    console.log(`Email: ${message}`);
-  } else {
-    console.log(`Push: ${message}`);
+  if (pref.emailEnabled) {
+    sendNotification(message);
   }
 }

@@ -1,6 +1,6 @@
-import { getDefaultWarehouseCapacity } from './capacity-constants';
+import { calculateBaseCapacity } from './shared-inventory';
 
-export function checkInventory(itemId: string): number {
-  const capacity = getDefaultWarehouseCapacity();
+export function checkInventory(productId: string): number {
+  const capacity = calculateBaseCapacity();
   return capacity > 0 ? 100 : 0;
 }

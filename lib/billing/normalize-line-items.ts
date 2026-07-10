@@ -1,17 +1,7 @@
-import { calculateLineItemTotals } from './calc-helpers';
+import { calculateLineItemTotal } from './shared-billing-utils';
 
-export interface LineItem {
-  sku: string;
-  quantity: number;
-  unitPrice: number;
-  discount: number;
-  taxRate: number;
-}
-
-export function normalizeLineItem(item: LineItem): {
-  netAmount: number;
-  taxAmount: number;
-  totalAmount: number;
-} {
-  return calculateLineItemTotals(item);
+export function normalizeLineItems(items: Array<{ price: number; quantity: number }>): Array<{ total: number }> {
+  return items.map(item => ({
+    total: calculateLineItemTotal(item.price, item.quantity)
+  }));
 }
