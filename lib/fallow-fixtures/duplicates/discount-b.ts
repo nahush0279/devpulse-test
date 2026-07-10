@@ -1,3 +1,1 @@
-export function computeDiscountedPrice(price: number, discount: number): number {
-  return price - price * (discount / 100);
-}
+export { computeDiscountedPrice } from './discount-a';

@@ -1,11 +1,3 @@
-import { twMerge } from "tailwind-merge";
-import type { Viewport } from "next";
-import { validateToken } from "./auth-service";
-
-export function formatUser(value: string): string {
-  if (!validateToken()) {
-    return value.trim();
-  }
-
-  return value.trim().toUpperCase();
+export function getUser(id: string) {
+  return { id, name: 'Test User' };
 }

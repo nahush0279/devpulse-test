@@ -1,1 +1,1 @@
-// This file is never imported anywhere - delete it
+// This is a new file for session replay analytics
