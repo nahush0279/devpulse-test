@@ -1,33 +1,25 @@
-export interface CustomerSegment {
+export interface CustomerProfile {
   id: string;
   name: string;
-  customerIds: string[];
+  email: string;
   createdAt: Date;
 }
 
-interface PendingInvitation {
+type PendingInvitation = {
   email: string;
   role: string;
   expiresAt: Date;
-}
+};
 
-interface StaleCacheEntry {
+type StaleCacheEntry = {
   key: string;
   lastAccessed: Date;
   ttl: number;
-}
+};
 
-interface WorkspaceMigrationState {
+type WorkspaceMigrationState = {
   workspaceId: string;
-  fromVersion: string;
-  toVersion: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-}
-
-export type CustomerProfile = {
-  id: string;
-  name: string;
-  email: string;
-  segment: CustomerSegment;
-  metadata: Record<string, unknown>;
+  fromVersion: number;
+  toVersion: number;
+  status: 'pending' | 'in-progress' | 'complete' | 'failed';
 };

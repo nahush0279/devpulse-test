@@ -1,2 +1,1 @@
-// Re-export from discount-a to avoid duplicate implementation
-export { computeDiscountedPrice } from './discount-a';
+// Duplicate removed - see discount-a.ts for computeDiscountedPrice

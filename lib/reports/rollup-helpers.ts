@@ -1,8 +1,14 @@
-import { LineItem, calculateLineItemTax } from './../billing/shared-line-item-utils';
+import { roundAmount } from '../shared/round-amount';
 
-export function rollupLineItems(items: LineItem[]): LineItem[] {
-  return items.map(item => ({
-    ...item,
-    taxAmount: calculateLineItemTax(item)
-  }));
+export interface ReportRow {
+  label: string;
+  values: number[];
+}
+
+export function computeRollup(rows: ReportRow[]): ReportRow {
+  const totals = rows.reduce((acc, row) => {
+    return row.values.map((v, i) => roundAmount(v + (acc[i] || 0)));
+  }, [] as number[]);
+  
+  return { label: 'Total', values: totals };
 }

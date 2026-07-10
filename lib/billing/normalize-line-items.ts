@@ -1,8 +1,19 @@
-import { LineItem, calculateLineItemTax } from './shared-line-item-utils';
+import { roundAmount } from '../shared/round-amount';
 
-export function normalizeLineItems(items: LineItem[]): LineItem[] {
-  return items.map(item => ({
+export interface LineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  taxRate: number;
+}
+
+export function normalizeLineItem(item: LineItem): LineItem {
+  const subtotal = roundAmount(item.quantity * item.unitPrice);
+  const tax = roundAmount(subtotal * item.taxRate);
+  
+  return {
     ...item,
-    taxAmount: calculateLineItemTax(item)
-  }));
+    quantity: item.quantity,
+    unitPrice: roundAmount(item.unitPrice),
+  };
 }

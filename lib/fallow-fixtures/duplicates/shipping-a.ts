@@ -1,12 +1,6 @@
-export function calculateShippingCost(weight: number, distance: number): number {
-  // Calculate base cost
-  const baseCost = weight * 0.5;
-
-  // Add distance surcharge
-  const distanceSurcharge = distance * 0.1;
-
-  // Apply volume discount for heavy packages
-  const discount = weight > 50 ? baseCost * 0.15 : 0;
-
-  return baseCost + distanceSurcharge - discount;
+export function calculateShippingCost(weight: number, destination: string): number {
+  const baseRate = 5.00;
+  const weightSurcharge = weight * 0.50;
+  const destinationMultiplier = destination === 'international' ? 2.5 : 1.0;
+  return (baseRate + weightSurcharge) * destinationMultiplier;
 }
