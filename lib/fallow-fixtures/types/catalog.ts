@@ -1,5 +1,4 @@
-export interface ProductListing {
-  id: string;
+export interface ProductCatalogItem {
   sku: string;
   title: string;
   price: number;
@@ -7,21 +6,21 @@ export interface ProductListing {
   inStock: boolean;
 }
 
-type ArchivedUserRecord = {
+interface ArchivedUserRecord {
   userId: string;
-  archivedAt: Date;
-  reason: string;
-};
+  archivedAt: string;
+  reason: "deleted" | "merged" | "inactive";
+}
 
 type LegacySessionToken = {
   token: string;
-  expiresAt: Date;
-  userId: string;
+  expiresAt: string;
+  issuedTo: string;
 };
 
-type DeprecatedAuditEntry = {
+interface DeprecatedAuditEntry {
+  id: string;
+  timestamp: string;
   action: string;
   performedBy: string;
-  timestamp: Date;
-  details: Record<string, unknown>;
-};
+}

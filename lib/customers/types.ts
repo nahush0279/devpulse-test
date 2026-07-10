@@ -2,26 +2,26 @@ export interface CustomerProfile {
   id: string;
   name: string;
   email: string;
-  createdAt: Date;
-  tier: 'standard' | 'premium' | 'enterprise';
+  planTier: string;
+  createdAt: string;
+  lastLoginAt: string;
 }
 
-type PendingInvitation = {
-  email: string;
-  role: string;
-  expiresAt: Date;
-};
+interface PendingInvitation {
+  inviterId: string;
+  inviteeEmail: string;
+  sentAt: string;
+}
 
-type StaleCacheEntry<T = unknown> = {
+type StaleCacheEntry = {
   key: string;
-  data: T;
-  lastAccessed: Date;
-  ttlMs: number;
+  lastAccessed: number;
+  size: number;
 };
 
-type WorkspaceMigrationState = {
-  sourceWorkspaceId: string;
-  targetWorkspaceId: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  startedAt: Date;
-};
+interface WorkspaceMigrationState {
+  fromOrgId: string;
+  toOrgId: string;
+  status: "pending" | "in_progress" | "completed";
+  startedAt: string;
+}
