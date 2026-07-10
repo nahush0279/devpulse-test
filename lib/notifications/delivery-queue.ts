@@ -1,8 +1,14 @@
-import { getDefaultPreference } from './shared-utils';
+import { NotificationPreference } from './shared-types';
 
-export function enqueueNotification(userId: string, message: string): void {
-  const pref = getDefaultPreference();
-  if (pref === 'email') {
-    // send email
+export class DeliveryQueue {
+  private queue: string[] = [];
+
+  add(notificationId: string): void {
+    this.queue.push(notificationId);
+  }
+
+  process(): void {
+    // Get user preferences and process
+    console.log('Processing delivery queue');
   }
 }

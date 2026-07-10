@@ -1,13 +1,8 @@
-import { validateLineItem } from '../shared/validate-line-item';
+import { LineItem, calculateLineItemTax } from './shared-line-item-utils';
 
-export function normalizeLineItems(items: Array<{ description: string; quantity: number; unitPrice: number }>) {
-  return items.map(item => {
-    validateLineItem(item);
-    return {
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      total: item.quantity * item.unitPrice,
-    };
-  });
+export function normalizeLineItems(items: LineItem[]): LineItem[] {
+  return items.map(item => ({
+    ...item,
+    taxAmount: calculateLineItemTax(item)
+  }));
 }

@@ -1,7 +1,12 @@
-import { getBaseCapacity } from './warehouse-utils';
+import { StockItem } from './shared-types';
 
-export function checkInventoryLevel(productId: string): number {
-  const capacity = getBaseCapacity();
-  // Simulation logic
-  return capacity * 0.5;
+export class InventoryService {
+  checkStock(itemId: string): boolean {
+    return true;
+  }
+
+  reserveItem(itemId: string, warehouseId: string): void {
+    // Inventory is checked and reserved
+    console.log(`Reserving item ${itemId} in warehouse ${warehouseId}`);
+  }
 }

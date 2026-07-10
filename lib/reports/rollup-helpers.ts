@@ -1,18 +1,8 @@
-import { validateLineItem } from '../shared/validate-line-item';
+import { LineItem, calculateLineItemTax } from './../billing/shared-line-item-utils';
 
-export function validateReportItem(item: { description: string; quantity: number; unitPrice: number }) {
-  validateLineItem(item);
-  return true;
-}
-
-export function generateRollupReport(items: Array<{ description: string; quantity: number; unitPrice: number }>) {
-  return items.map(item => {
-    validateReportItem(item);
-    return {
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      total: item.quantity * item.unitPrice,
-    };
-  });
+export function rollupLineItems(items: LineItem[]): LineItem[] {
+  return items.map(item => ({
+    ...item,
+    taxAmount: calculateLineItemTax(item)
+  }));
 }

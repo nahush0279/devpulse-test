@@ -1,5 +1,13 @@
-import { getDefaultPreference } from './shared-utils';
+import { NotificationPreference } from './shared-types';
 
-export function getPreference(userId: string): string {
-  return getDefaultPreference();
+export class PreferenceStore {
+  private preferences: Map<string, NotificationPreference> = new Map();
+
+  getPreferences(userId: string): NotificationPreference | undefined {
+    return this.preferences.get(userId);
+  }
+
+  setPreferences(userId: string, prefs: NotificationPreference): void {
+    this.preferences.set(userId, prefs);
+  }
 }

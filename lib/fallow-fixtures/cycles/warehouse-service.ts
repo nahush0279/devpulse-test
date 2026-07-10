@@ -1,6 +1,11 @@
-import { getBaseCapacity } from './warehouse-utils';
+import { WarehouseAllocation } from './shared-types';
 
-export function getWarehouseCapacity(warehouseId: string): number {
-  const level = getBaseCapacity() * 0.5;
-  return level * 2;
+export class WarehouseService {
+  allocateSpace(itemId: string): void {
+    console.log(`Allocating space for ${itemId}`);
+  }
+
+  checkCapacity(): number {
+    return 100;
+  }
 }

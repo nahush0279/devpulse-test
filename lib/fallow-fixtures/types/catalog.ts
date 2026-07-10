@@ -1,30 +1,47 @@
-export interface ProductListing {
-  sku: string;
-  title: string;
+export interface Product {
+  id: string;
+  name: string;
   price: number;
-  stock: number;
+  category: string;
 }
 
-type ArchivedUserRecord = {
+export interface InventoryItem {
+  productId: string;
+  quantity: number;
+  warehouse: string;
+  lastRestocked: Date;
+}
+
+interface ArchivedUserRecord {
   userId: string;
   archivedAt: Date;
   reason: string;
-};
+}
 
-type LegacySessionToken = {
+interface LegacySessionToken {
   token: string;
   userId: string;
   expiresAt: Date;
-};
+  version: number;
+}
 
-type DeprecatedAuditEntry = {
-  id: string;
+interface DeprecatedAuditEntry {
   action: string;
+  performedBy: string;
   timestamp: Date;
-};
+  details: string;
+}
 
-export interface ProductCategory {
+export interface Order {
   id: string;
-  name: string;
-  parentId: string | null;
+  product: Product;
+  quantity: number;
+  status: 'pending' | 'shipped' | 'delivered' | 'cancelled';
+}
+
+export interface PickingListItem {
+  orderId: string;
+  product: Product;
+  quantity: number;
+  picked: boolean;
 }

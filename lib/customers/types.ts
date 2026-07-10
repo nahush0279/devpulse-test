@@ -1,28 +1,33 @@
-export interface CustomerProfile {
+export interface CustomerSegment {
   id: string;
   name: string;
-  email: string;
+  customerIds: string[];
   createdAt: Date;
 }
 
-type PendingInvitation = {
+interface PendingInvitation {
   email: string;
-  token: string;
+  role: string;
   expiresAt: Date;
-};
-
-type StaleCacheEntry<T = unknown> = {
-  key: string;
-  data: T;
-  lastAccessed: Date;
-};
-
-type WorkspaceMigrationState = {
-  sourceId: string;
-  targetId: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-};
-
-export function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
+
+interface StaleCacheEntry {
+  key: string;
+  lastAccessed: Date;
+  ttl: number;
+}
+
+interface WorkspaceMigrationState {
+  workspaceId: string;
+  fromVersion: string;
+  toVersion: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+}
+
+export type CustomerProfile = {
+  id: string;
+  name: string;
+  email: string;
+  segment: CustomerSegment;
+  metadata: Record<string, unknown>;
+};
