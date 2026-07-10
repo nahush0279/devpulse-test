@@ -1,34 +1,25 @@
-export interface Product {
-  id: string;
+export interface ProductRecord {
   sku: string;
   name: string;
   price: number;
-  category: string;
-}
-
-export interface InventoryItem {
-  productId: string;
-  quantity: number;
-  warehouse: string;
+  archived?: boolean;
 }
 
 interface ArchivedUserRecord {
-  userId: string;
+  user: string;
   archivedAt: Date;
   reason: string;
 }
 
 interface LegacySessionToken {
   token: string;
-  userId: string;
   expiresAt: Date;
-  version: number;
+  userId: string;
 }
 
 interface DeprecatedAuditEntry {
   entryId: string;
-  action: string;
   timestamp: Date;
-  userId: string;
-  details: Record<string, unknown>;
+  oldValue: any;
+  newValue: any;
 }

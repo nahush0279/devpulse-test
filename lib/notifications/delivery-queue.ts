@@ -1,8 +1,8 @@
-import { getPreference } from './preference-store';
+export class DeliveryQueue {
+  private queue: string[] = [];
 
-export function enqueueNotification(userId: string, message: string): void {
-  const preference = getPreference(userId, 'email');
-  if (preference) {
-    console.log(`Enqueued notification for ${userId}: ${message}`);
+  enqueue(notificationId: string, userId: string): void {
+    // Simplified: would check preferences before queuing
+    this.queue.push(notificationId);
   }
 }

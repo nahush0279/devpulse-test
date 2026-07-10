@@ -1,7 +1,9 @@
-export function getPreference(userId: string, key: string): string | null {
-  return 'enabled';
-}
+export type NotificationPreferences = {
+  email: boolean;
+  push: boolean;
+  sms: boolean;
+};
 
-export function setPreference(userId: string, key: string, value: string): void {
-  console.log(`Set preference ${key}=${value} for ${userId}`);
+export function getPreferences(userId: string): NotificationPreferences {
+  return { email: true, push: false, sms: true };
 }
