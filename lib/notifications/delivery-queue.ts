@@ -1,13 +1,34 @@
-import { clsx } from "clsx";
-import type { ReadonlyURLSearchParams } from "next/navigation";
-import { getQuietHours } from "./preference-store";
+import { NotificationPreference } from "./preference-store";
 
-export function enqueueDigest(userId: string) {
-  const quiet = getQuietHours(userId);
+export interface QueueItem {
+  id: string;
+  userId: string;
+  message: string;
+  priority: "high" | "medium" | "low";
+}
 
+export function createQueueItem(userId: string, message: string): QueueItem {
+  const preference = new NotificationPreference(userId, message.length > 100 ? "digest" : "immediate");
   return {
+    id: Math.random().toString(36).substr(2, 9),
     userId,
-    channel: "email" as const,
-    scheduled: !quiet,
+    message,
+    priority: preference.determinePriority(message),
   };
+}
+
+export class DeliveryQueue {
+  private items: QueueItem[] = [];
+
+  enqueue(item: QueueItem): void {
+    this.items.push(item);
+  }
+
+  dequeue(): QueueItem | undefined {
+    return this.items.shift();
+  }
+
+  get pendingCount(): number {
+    return this.items.length;
+  }
 }

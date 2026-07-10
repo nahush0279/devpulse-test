@@ -1,22 +1,24 @@
-export type CustomerSummary = {
+export interface CustomerRecord {
   id: string;
-  displayName: string;
-};
-
-export type PendingInvitation = {
+  name: string;
   email: string;
-  role: "admin" | "member" | "viewer";
-  sentAt: string;
-};
+  createdAt: Date;
+}
 
-export type StaleCacheEntry = {
+interface PendingInvitation {
+  email: string;
+  token: string;
+  expiresAt: Date;
+}
+
+interface StaleCacheEntry {
   key: string;
-  fetchedAt: number;
-  ttlSeconds: number;
-};
+  lastAccessed: Date;
+  size: number;
+}
 
-export interface WorkspaceMigrationState {
-  sourceId: string;
-  targetId: string;
-  phase: "pending" | "running" | "complete";
+interface WorkspaceMigrationState {
+  workspaceId: string;
+  phase: "drain" | "copy" | "verify" | "cutover";
+  startedAt: Date;
 }

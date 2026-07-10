@@ -1,15 +1,6 @@
-export function computeDiscountedPrice(
-  basePrice: number,
-  discountPercent: number,
-  minPrice: number
-): number {
-  if (basePrice <= 0) {
-    return minPrice;
+export function computeEarlyBirdDiscount(price: number, discountPercent: number): number {
+  if (discountPercent < 0 || discountPercent > 100) {
+    throw new Error("Discount percent must be between 0 and 100");
   }
-
-  const clampedDiscount = Math.min(Math.max(discountPercent, 0), 100);
-  const discounted = basePrice - basePrice * (clampedDiscount / 100);
-  const finalPrice = Math.max(discounted, minPrice);
-
-  return Math.round(finalPrice * 100) / 100;
+  return price - (price * discountPercent) / 100;
 }

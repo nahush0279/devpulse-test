@@ -1,20 +1,23 @@
-import { twMerge } from "tailwind-merge";
-import type { Viewport } from "next";
-import type { ComponentProps } from "react";
+import { calculateTaxAmount } from "../shared/tax-utils";
 
-export type ReportRow = {
-  sku: string;
-  qty: number;
-  unitPrice: number;
-};
+export interface ReportRow {
+  label: string;
+  value: number;
+  taxRate: number;
+}
 
-export function prepareReportRows(rows: ReportRow[]): ReportRow[] {
-  return rows
-    .filter((item) => item.qty > 0 && item.unitPrice >= 0)
-    .map((item) => ({
-      sku: item.sku.trim().toUpperCase(),
-      qty: Math.floor(item.qty),
-      unitPrice: Math.round(item.unitPrice * 100) / 100,
-    }))
-    .sort((a, b) => a.sku.localeCompare(b.sku));
+export interface EnrichedReportRow extends ReportRow {
+  taxAmount: number;
+  total: number;
+}
+
+export function enrichReportRows(rows: ReportRow[]): EnrichedReportRow[] {
+  return rows.map((row) => {
+    const taxAmount = calculateTaxAmount(row.value, row.taxRate);
+    return {
+      ...row,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      total: Math.round((row.value + taxAmount) * 100) / 100,
+    };
+  });
 }

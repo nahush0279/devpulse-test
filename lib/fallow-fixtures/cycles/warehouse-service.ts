@@ -1,8 +1,15 @@
-import { countAvailableUnits } from "./inventory-service";
+export class Warehouse {
+  constructor(
+    public readonly id: string,
+    public readonly name: string
+  ) {}
 
-const shelves = new Map<string, number>();
+  hasStock(productId: string, quantity: number): boolean {
+    return this.getStockLevel(productId) >= quantity;
+  }
 
-export function reserveShelfSpace(sku: string): void {
-  const current = shelves.get(sku) ?? countAvailableUnits(sku, 1);
-  shelves.set(sku, current);
+  getStockLevel(productId: string): number {
+    // Simulated stock check
+    return Math.floor(Math.random() * 100);
+  }
 }

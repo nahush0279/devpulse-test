@@ -1,19 +1,32 @@
-import { clsx } from "clsx";
-import type { Metadata } from "next";
+import { calculateTaxAmount } from "../shared/tax-utils";
 
-export type LineItem = {
-  sku: string;
-  qty: number;
+export interface LineItem {
+  description: string;
+  quantity: number;
   unitPrice: number;
-};
+  taxRate: number;
+}
 
-export function normalizeLineItems(items: LineItem[]): LineItem[] {
-  return items
-    .filter((item) => item.qty > 0 && item.unitPrice >= 0)
-    .map((item) => ({
-      sku: item.sku.trim().toUpperCase(),
-      qty: Math.floor(item.qty),
-      unitPrice: Math.round(item.unitPrice * 100) / 100,
-    }))
-    .sort((a, b) => a.sku.localeCompare(b.sku));
+export interface NormalizedLineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  taxAmount: number;
+  grandTotal: number;
+}
+
+export function normalizeLineItems(items: LineItem[]): NormalizedLineItem[] {
+  return items.map((item) => {
+    const lineTotal = item.quantity * item.unitPrice;
+    const taxAmount = calculateTaxAmount(lineTotal, item.taxRate);
+    return {
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      lineTotal,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      grandTotal: Math.round((lineTotal + taxAmount) * 100) / 100,
+    };
+  });
 }

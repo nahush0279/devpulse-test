@@ -1,11 +1,23 @@
-import { reserveShelfSpace } from "./warehouse-service";
+import { Warehouse } from "./warehouse-service";
 
-export function countAvailableUnits(sku: string, quantity: number): number {
-  reserveShelfSpace(sku);
+export function checkProductAvailability(productId: string, quantity: number): boolean {
+  const warehouse = new Warehouse("main-warehouse", "Main Warehouse");
+  return warehouse.hasStock(productId, quantity);
+}
 
-  if (quantity <= 0) {
-    return 0;
+export class InventoryManager {
+  private warehouse: Warehouse;
+
+  constructor(warehouseId: string, name: string) {
+    this.warehouse = new Warehouse(warehouseId, name);
   }
 
-  return quantity;
+  checkStock(productId: string, quantity: number): boolean {
+    return this.warehouse.hasStock(productId, quantity);
+  }
+
+  getInventoryLevel(productId: string, warehouseId: string): number {
+    const warehouse = new Warehouse(warehouseId, `Warehouse ${warehouseId}`);
+    return warehouse.getStockLevel(productId);
+  }
 }
