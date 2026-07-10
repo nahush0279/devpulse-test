@@ -20,7 +20,7 @@ export type LegacySessionToken = {
 };
 
 /** Unused interface — should be flagged by Fallow. */
-export interface DeprecatedAuditEntry {
+interface DeprecatedAuditEntry {
   actor: string;
   action: string;
   timestamp: string;

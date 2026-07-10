@@ -1,5 +1,6 @@
 import { clsx } from "clsx";
 import type { Metadata } from "next";
+import { normalizeSkuRows } from "@/lib/shared/normalize-sku-rows";
 
 export type LineItem = {
   sku: string;
@@ -8,12 +9,5 @@ export type LineItem = {
 };
 
 export function normalizeLineItems(items: LineItem[]): LineItem[] {
-  return items
-    .filter((item) => item.qty > 0 && item.unitPrice >= 0)
-    .map((item) => ({
-      sku: item.sku.trim().toUpperCase(),
-      qty: Math.floor(item.qty),
-      unitPrice: Math.round(item.unitPrice * 100) / 100,
-    }))
-    .sort((a, b) => a.sku.localeCompare(b.sku));
+  return normalizeSkuRows(items);
 }
