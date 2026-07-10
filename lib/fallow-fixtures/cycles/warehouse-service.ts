@@ -1,14 +1,7 @@
-import { getInventoryByWarehouse } from "./inventory-service";
-
-export function getWarehouseByCode(code: string) {
-  return {
-    code,
-    name: `Warehouse-${code}`,
-  };
+export function getWarehouseCapacity(productId: string) {
+  return 100;
 }
 
-export function getWarehouseWithInventory(code: string) {
-  const warehouse = getWarehouseByCode(code);
-  const inventory = getInventoryByWarehouse(code);
-  return { ...warehouse, inventory };
+export function getWarehouseLocation(productId: string) {
+  return `WH-${productId}`;
 }

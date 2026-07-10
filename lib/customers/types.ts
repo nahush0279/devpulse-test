@@ -2,23 +2,23 @@ export interface CustomerProfile {
   id: string;
   name: string;
   email: string;
-  tier: "standard" | "premium" | "enterprise";
+  createdAt: Date;
 }
 
-interface PendingInvitation {
+type PendingInvitation = {
   email: string;
   role: "admin" | "member";
-  expiresAt: Date;
-}
+  invitedAt: Date;
+};
 
-interface StaleCacheEntry {
+type StaleCacheEntry = {
   key: string;
   lastAccessed: Date;
   ttl: number;
-}
+};
 
-interface WorkspaceMigrationState {
-  fromVersion: number;
-  toVersion: number;
+type WorkspaceMigrationState = {
+  from: string;
+  to: string;
   progress: number;
-}
+};

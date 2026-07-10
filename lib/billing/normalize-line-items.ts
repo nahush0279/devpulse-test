@@ -1,19 +1,31 @@
-import { roundAmount } from '../shared/round-amount';
+import { normalizeCurrency, computeAbsoluteAmount } from "../shared/numeric-helpers";
 
 export interface LineItem {
+  id: string;
   description: string;
   quantity: number;
   unitPrice: number;
-  taxRate: number;
+  total: number;
+  currency: string;
 }
 
-export function normalizeLineItem(item: LineItem): LineItem {
-  const subtotal = roundAmount(item.quantity * item.unitPrice);
-  const tax = roundAmount(subtotal * item.taxRate);
-  
-  return {
-    ...item,
-    quantity: item.quantity,
-    unitPrice: roundAmount(item.unitPrice),
-  };
+export function normalizeLineItems(items: LineItem[]) {
+  return items.map((item) => {
+    const currency = normalizeCurrency(item.currency);
+    const total = computeAbsoluteAmount(item.quantity, item.unitPrice);
+    
+    return {
+      ...item,
+      currency,
+      total,
+    };
+  });
+}
+
+export function calculateSubtotal(items: LineItem[]) {
+  return items.reduce((sum, item) => {
+    const currency = normalizeCurrency(item.currency);
+    const total = computeAbsoluteAmount(item.quantity, item.unitPrice);
+    return sum + total;
+  }, 0);
 }

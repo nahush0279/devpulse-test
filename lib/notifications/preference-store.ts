@@ -1,8 +1,11 @@
-import { deliverNotification } from "./delivery-queue";
-
-export function getPreference(userId: string) {
-  return {
-    userId,
-    blockedTypes: ["marketing"],
-  };
+export class NotificationPreferences {
+  static store: Map<string, { channel: string }> = new Map();
+  
+  static get(userId: string) {
+    return this.store.get(userId);
+  }
+  
+  static set(userId: string, prefs: { channel: string }) {
+    this.store.set(userId, prefs);
+  }
 }

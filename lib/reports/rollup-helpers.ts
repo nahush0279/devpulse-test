@@ -1,14 +1,29 @@
-import { roundAmount } from '../shared/round-amount';
+import { normalizeCurrency, computeAbsoluteAmount } from "../shared/numeric-helpers";
 
 export interface ReportRow {
   label: string;
-  values: number[];
+  value: number;
+  currency: string;
+  quantity: number;
 }
 
-export function computeRollup(rows: ReportRow[]): ReportRow {
-  const totals = rows.reduce((acc, row) => {
-    return row.values.map((v, i) => roundAmount(v + (acc[i] || 0)));
-  }, [] as number[]);
-  
-  return { label: 'Total', values: totals };
+export function rollupReportRows(rows: ReportRow[]) {
+  return rows.map((row) => {
+    const currency = normalizeCurrency(row.currency);
+    const value = computeAbsoluteAmount(row.quantity, row.value);
+    
+    return {
+      ...row,
+      currency,
+      value,
+    };
+  });
+}
+
+export function computeGrandTotal(rows: ReportRow[]) {
+  return rows.reduce((sum, row) => {
+    const currency = normalizeCurrency(row.currency);
+    const value = computeAbsoluteAmount(row.quantity, row.value);
+    return sum + value;
+  }, 0);
 }
