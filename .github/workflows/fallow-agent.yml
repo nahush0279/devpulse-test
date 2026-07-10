@@ -36,6 +36,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm test --if-present
+
       # ════════════════════════════════════════════════════════════════
       # BLOCKING CHECKS — fail the PR if any of these are introduced
       # ════════════════════════════════════════════════════════════════
