@@ -54,6 +54,7 @@ jobs:
           if [ -n "$CHANGED" ]; then
             npx eslint --no-eslintrc --parser-options=ecmaVersion:latest,sourceType:module \
               --rule '{"no-unused-vars": ["error", {"args":"none","varsIgnorePattern":"^_"}]}' \
+              --format json --output-file eslint-report.json \
               $CHANGED || echo "UNUSED_IMPORT_FAIL=true" >> "$GITHUB_ENV"
           fi
 
@@ -85,6 +86,7 @@ jobs:
         if: always()
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
