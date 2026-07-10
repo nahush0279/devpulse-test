@@ -2,25 +2,28 @@ export interface CustomerProfile {
   id: string;
   name: string;
   email: string;
-  active: boolean;
   createdAt: Date;
 }
 
 interface PendingInvitation {
-  id: string;
-  invitedEmail: string;
+  email: string;
   role: string;
+  invitedAt: Date;
   expiresAt: Date;
 }
 
 interface StaleCacheEntry {
   key: string;
   lastAccessed: Date;
-  staleThreshold: number;
+  ttl: number;
 }
 
 interface WorkspaceMigrationState {
   workspaceId: string;
-  migrationVersion: number;
-  completedAt: Date | null;
+  sourceRegion: string;
+  targetRegion: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  startedAt: Date;
 }
+
+export type CustomerStatus = 'active' | 'inactive' | 'suspended';

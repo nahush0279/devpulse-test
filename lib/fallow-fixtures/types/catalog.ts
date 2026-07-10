@@ -1,34 +1,32 @@
-export interface Product {
-  id: string;
-  name: string;
+export interface ProductItem {
   sku: string;
-  price: number;
-  inventory: number;
-}
-
-export interface Category {
-  id: string;
   name: string;
-  slug: string;
-  parentId: string | null;
+  price: number;
+  category: string;
+  inStock: boolean;
 }
 
 interface ArchivedUserRecord {
   userId: string;
   archivedAt: Date;
   reason: string;
+  restoredData?: Record<string, unknown>;
 }
 
 interface LegacySessionToken {
-  token: string;
+  tokenId: string;
   userId: string;
+  issuedAt: Date;
   expiresAt: Date;
-  version: number;
+  scope: string[];
 }
 
 interface DeprecatedAuditEntry {
+  id: string;
   action: string;
-  userId: string;
+  targetId: string;
   timestamp: Date;
-  details: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
+
+export type CatalogSortOption = 'price_asc' | 'price_desc' | 'name' | 'popularity';

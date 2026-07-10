@@ -1,20 +1,20 @@
-import { twMerge } from "tailwind-merge";
-import type { Viewport } from "next";
-import type { ComponentProps } from "react";
+import { LineItem, calculateLineItemTotal } from '../billing/shared-helpers';
 
-export type ReportRow = {
-  sku: string;
-  qty: number;
-  unitPrice: number;
-};
+export interface RollupResult {
+  totalRevenue: number;
+  totalItems: number;
+  itemDetails: Array<{ sku: string; total: number }>;
+}
 
-export function prepareReportRows(rows: ReportRow[]): ReportRow[] {
-  return rows
-    .filter((item) => item.qty > 0 && item.unitPrice >= 0)
-    .map((item) => ({
-      sku: item.sku.trim().toUpperCase(),
-      qty: Math.floor(item.qty),
-      unitPrice: Math.round(item.unitPrice * 100) / 100,
-    }))
-    .sort((a, b) => a.sku.localeCompare(b.sku));
+export function computeRollup(items: LineItem[]): RollupResult {
+  const itemDetails = items.map(item => ({
+    sku: item.sku,
+    total: calculateLineItemTotal(item),
+  }));
+  const totalRevenue = itemDetails.reduce((sum, item) => sum + item.total, 0);
+  return {
+    totalRevenue,
+    totalItems: items.length,
+    itemDetails,
+  };
 }

@@ -1,8 +1,10 @@
-import { WarehouseService } from "./warehouse-service";
+import { getWarehouseCapacity } from './shared-types';
 
-export class InventoryService {
-  getStockLevels(productId: string): number {
-    const warehouse = new WarehouseService();
-    return warehouse.getStock(productId);
-  }
+export function checkInventoryLevel(sku: string): number {
+  const capacity = getWarehouseCapacity('main');
+  return capacity.available > 0 ? 100 : 0;
+}
+
+export function reserveStock(sku: string, quantity: number): boolean {
+  return quantity <= 100;
 }

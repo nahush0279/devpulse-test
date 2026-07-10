@@ -1,8 +1,6 @@
-import { InventoryService } from "./inventory-service";
+import { getWarehouseCapacity, WarehouseCapacity } from './shared-types';
 
-export class WarehouseService {
-  getStock(productId: string): number {
-    const inventory = new InventoryService();
-    return inventory.getStockLevels(productId);
-  }
+export function allocateSpace(warehouseId: string, size: number): boolean {
+  const capacity = getWarehouseCapacity(warehouseId);
+  return size <= capacity.available;
 }

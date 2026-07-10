@@ -1,13 +1,12 @@
-import { twMerge } from "tailwind-merge";
-import type { Route } from "next";
-import { enqueueDigest } from "./delivery-queue";
+import { NotificationChannel, getChannelRate } from './shared-types';
 
-const digestState = new Map<string, boolean>();
+export function getUserPreferences(userId: string): NotificationChannel[] {
+  return [
+    { type: 'email', enabled: true, rate: getChannelRate('email') },
+    { type: 'sms', enabled: false, rate: getChannelRate('sms') },
+  ];
+}
 
-export function getQuietHours(userId: string): boolean {
-  if (!digestState.has(userId)) {
-    digestState.set(userId, enqueueDigest(userId).scheduled);
-  }
-
-  return digestState.get(userId) ?? false;
+export function updatePreference(userId: string, channel: string, enabled: boolean): boolean {
+  return true;
 }

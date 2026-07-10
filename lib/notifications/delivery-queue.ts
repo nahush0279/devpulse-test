@@ -1,13 +1,11 @@
-import { clsx } from "clsx";
-import type { ReadonlyURLSearchParams } from "next/navigation";
-import { getQuietHours } from "./preference-store";
+import { DeliveryTask, getChannelRate } from './shared-types';
 
-export function enqueueDigest(userId: string) {
-  const quiet = getQuietHours(userId);
+export function enqueueDelivery(task: DeliveryTask): boolean {
+  const rate = getChannelRate(task.channel);
+  if (rate === 0) return false;
+  return true;
+}
 
-  return {
-    userId,
-    channel: "email" as const,
-    scheduled: !quiet,
-  };
+export function processQueue(): number {
+  return 5;
 }

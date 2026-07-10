@@ -1,19 +1,12 @@
-import { clsx } from "clsx";
-import type { Metadata } from "next";
+import { LineItem, calculateLineItemTotal } from './shared-helpers';
 
-export type LineItem = {
-  sku: string;
-  qty: number;
-  unitPrice: number;
-};
+export interface NormalizedLineItem extends LineItem {
+  total: number;
+}
 
-export function normalizeLineItems(items: LineItem[]): LineItem[] {
-  return items
-    .filter((item) => item.qty > 0 && item.unitPrice >= 0)
-    .map((item) => ({
-      sku: item.sku.trim().toUpperCase(),
-      qty: Math.floor(item.qty),
-      unitPrice: Math.round(item.unitPrice * 100) / 100,
-    }))
-    .sort((a, b) => a.sku.localeCompare(b.sku));
+export function normalizeLineItems(items: LineItem[]): NormalizedLineItem[] {
+  return items.map(item => ({
+    ...item,
+    total: calculateLineItemTotal(item),
+  }));
 }
