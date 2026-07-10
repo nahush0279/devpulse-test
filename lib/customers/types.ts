@@ -1,27 +1,26 @@
-export type CustomerProfile = {
+export interface CustomerProfile {
   id: string;
   name: string;
   email: string;
-};
+  createdAt: Date;
+}
 
-type PendingInvitation = {
+interface PendingInvitation {
+  inviteId: string;
   email: string;
-  invitedAt: Date;
-};
+  role: string;
+  expiresAt: Date;
+}
 
-type StaleCacheEntry = {
+interface StaleCacheEntry {
   key: string;
+  data: unknown;
   lastAccessed: Date;
-};
+}
 
-type WorkspaceMigrationState = {
-  workspaceId: string;
-  fromPlan: string;
-  toPlan: string;
-};
-
-export type BillingCycle = {
-  start: Date;
-  end: Date;
-  amount: number;
-};
+interface WorkspaceMigrationState {
+  sourceWorkspaceId: string;
+  targetWorkspaceId: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  startedAt: Date;
+}

@@ -1,25 +1,34 @@
-export type Product = {
+export interface Product {
   id: string;
+  sku: string;
   name: string;
   price: number;
-};
+  category: string;
+}
 
-type ArchivedUserRecord = {
+export interface InventoryItem {
+  productId: string;
+  quantity: number;
+  warehouse: string;
+}
+
+interface ArchivedUserRecord {
   userId: string;
   archivedAt: Date;
-};
+  reason: string;
+}
 
-type LegacySessionToken = {
+interface LegacySessionToken {
   token: string;
+  userId: string;
   expiresAt: Date;
-};
+  version: number;
+}
 
-type DeprecatedAuditEntry = {
-  id: string;
+interface DeprecatedAuditEntry {
+  entryId: string;
   action: string;
-};
-
-export type Order = {
-  orderId: string;
-  items: string[];
-};
+  timestamp: Date;
+  userId: string;
+  details: Record<string, unknown>;
+}

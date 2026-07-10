@@ -1,15 +1,9 @@
-import { convertCurrency } from '../billing/currency-utils';
+import { standardizeAmount } from '../shared/amount-utils';
 
-type ReportRow = {
-  id: string;
-  value: number;
-  unit: string;
-};
-
-export function rollupReport(rows: ReportRow[], targetUnit: string): ReportRow[] {
-  return rows.map((row) => ({
-    ...row,
-    value: convertCurrency(row.value, row.unit, targetUnit),
-    unit: targetUnit,
+export function rollupTransactions(transactions: Array<{ value: number; currency: string }>): number {
+  const standardized = transactions.map(tx => ({
+    value: standardizeAmount(tx.value),
+    currency: tx.currency
   }));
+  return standardized.reduce((sum, tx) => sum + tx.value, 0);
 }

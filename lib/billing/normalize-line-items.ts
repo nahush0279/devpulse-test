@@ -1,15 +1,8 @@
-import { convertCurrency } from './currency-utils';
+import { standardizeAmount } from '../shared/amount-utils';
 
-type LineItem = {
-  id: string;
-  amount: number;
-  currency: string;
-};
-
-export function normalizeLineItems(items: LineItem[], targetCurrency: string): LineItem[] {
-  return items.map((item) => ({
-    ...item,
-    amount: convertCurrency(item.amount, item.currency, targetCurrency),
-    currency: targetCurrency,
+export function normalizeLineItems(items: Array<{ amount: number; currency: string }>): Array<{ amount: number; currency: string }> {
+  return items.map(item => ({
+    amount: standardizeAmount(item.amount),
+    currency: item.currency.toUpperCase()
   }));
 }

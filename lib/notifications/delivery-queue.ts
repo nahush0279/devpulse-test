@@ -1,6 +1,8 @@
-import { getPreference } from './delivery-base';
+import { getPreference } from './preference-store';
 
-export function queueDelivery(userId: string, message: string): void {
-  const pref = getPreference(userId);
-  console.log(`Queued delivery for ${userId}: ${message}`);
+export function enqueueNotification(userId: string, message: string): void {
+  const preference = getPreference(userId, 'email');
+  if (preference) {
+    console.log(`Enqueued notification for ${userId}: ${message}`);
+  }
 }

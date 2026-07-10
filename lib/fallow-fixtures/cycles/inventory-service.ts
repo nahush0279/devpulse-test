@@ -1,5 +1,6 @@
-import { WAREHOUSE_CAPACITY } from './shared-types';
+import { getStorageCapacity } from './inventory-storage';
 
-export function checkInventory(itemId: string): boolean {
-  return WAREHOUSE_CAPACITY > 0;
+export function checkInventoryLevels(productId: string, quantity: number): boolean {
+  const capacity = getStorageCapacity('main');
+  return quantity <= capacity;
 }

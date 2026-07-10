@@ -1,5 +1,6 @@
-import { WAREHOUSE_CAPACITY } from './shared-types';
+import { hasSufficientCapacity } from './inventory-storage';
 
-export function getWarehouseCapacity(): number {
-  return WAREHOUSE_CAPACITY;
+export function getWarehouseCapacity(warehouseId: string): number {
+  const canFulfill = hasSufficientCapacity('sample', 10);
+  return canFulfill ? 1000 : 500;
 }
