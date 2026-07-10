@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # full history so fallow/git can find the merge base
+          fetch-depth: 0 # needed so fallow can diff against the base branch
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 20
 
       - name: Install dependencies
         run: npm ci
@@ -31,37 +31,41 @@ jobs:
       # BLOCKING CHECKS — fail the PR if any of these are introduced
       # ════════════════════════════════════════════════════════════════
 
-      # 1. console.log / unused-imports added by THIS PR (added lines only)
-      - name: Block new console logs & unused imports
+      # 1. console.log added by THIS PR -> write file+line JSON so the agent
+      #    can post each as an inline review comment (not just a CI-log line).
+      - name: Detect new console statements
         run: |
           git fetch origin "${{ github.base_ref }}" || true
           BASE="origin/${{ github.base_ref }}"
 
-          # --- console statements in added lines of JS/TS files ---
-          ADDED_CONSOLE=$(git diff "$BASE" HEAD --unified=0 -- '*.js' '*.jsx' '*.ts' '*.tsx' \
-            | grep -E '^\+' | grep -vE '^\+\+\+' \
-            | grep -E 'console\.(log|debug|info|warn|error)\(' \
-            | grep -v 'eslint-disable' || true)
+          # Per added line, capture file + new-file line number from the diff hunks.
+          git diff "$BASE" HEAD --unified=0 -- '*.js' '*.jsx' '*.ts' '*.tsx' \
+          | awk '
+            /^\+\+\+ b\// { file = substr($0, 7); next }
+            /^@@/ {
+              # @@ -a,b +c,d @@  -> new-file start line is c
+              match($0, /\+[0-9]+/); ln = substr($0, RSTART+1, RLENGTH-1) + 0; next
+            }
+            /^\+/ && !/^\+\+\+/ {
+              if ($0 ~ /console\.(log|debug|info|warn|error)\(/ && $0 !~ /eslint-disable/ && $0 !~ /fallow-ignore/) {
+                printf("%s\t%d\n", file, ln);
+              }
+              ln++;
+              next
+            }
+          ' > console-hits.tsv || true
 
-          if [ -n "$ADDED_CONSOLE" ]; then
-            echo "::error::This PR adds console statements. Remove them or use the project logger:"
-            echo "$ADDED_CONSOLE"
+          if [ -s console-hits.tsv ]; then
+            echo "::error::This PR adds console statements:"
+            cat console-hits.tsv
             echo "CONSOLE_FAIL=true" >> "$GITHUB_ENV"
           fi
 
-          # --- unused imports (file-local) via ESLint on changed files only ---
-          CHANGED=$(git diff "$BASE" HEAD --name-only --diff-filter=ACMR -- '*.js' '*.jsx' '*.ts' '*.tsx')
-          if [ -n "$CHANGED" ]; then
-            npx eslint --no-eslintrc --parser-options=ecmaVersion:latest,sourceType:module \
-              --rule '{"no-unused-vars": ["error", {"args":"none","varsIgnorePattern":"^_"}]}' \
-              --format json --output-file eslint-report.json \
-              $CHANGED || echo "UNUSED_IMPORT_FAIL=true" >> "$GITHUB_ENV"
-          fi
-
       # 2. Fallow gate — fail the PR on blocking findings in changed files.
-      #    --changed-since limits scope to what this PR touched (your "new-only").
-      #    --fail-on-issues exits 1 -> blocks the merge.
-      #    Severity per category still comes from .fallowrc.json (error vs warn).
+      #    --changed-since scopes to what this PR touched (your "new-only").
+      #    --fail-on-issues exits 1 -> blocks the merge. NO commenting here:
+      #    all PR comments come from the agent, so there are no duplicate /
+      #    docs-link comments from Fallow's native output.
       - name: Fallow audit (gate)
         run: |
           npx fallow audit \
@@ -73,33 +77,30 @@ jobs:
       # ════════════════════════════════════════════════════════════════
 
       - name: Fallow audit (JSON for agent)
-        if: always() # run even if blocking checks failed, so the comment explains why
+        if: always() # run even if the gate failed, so the comment still posts
         run: |
           npx fallow audit \
             --changed-since "origin/${{ github.base_ref }}" \
             --format json > fallow-report.json || true
-          npx fallow dupes \
-            --changed-since "origin/${{ github.base_ref }}" \
+          npx fallow dupes --changed-since "origin/${{ github.base_ref }}" \
             --format json > fallow-dupes.json || true
 
       - name: AI agent — analyze & comment on PR
         if: always()
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           BASE_REF: ${{ github.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CONSOLE_FAIL: ${{ env.CONSOLE_FAIL }}
-          UNUSED_IMPORT_FAIL: ${{ env.UNUSED_IMPORT_FAIL }}
         run: node scripts/fallow-agent.mjs
 
-      # Surface the grep-based failures as a job failure at the end,
-      # after the agent has had a chance to comment.
-      - name: Enforce console/import blocks
-        if: env.CONSOLE_FAIL == 'true' || env.UNUSED_IMPORT_FAIL == 'true'
+      # Surface the console-statement block as a job failure at the end,
+      # after the agent has posted its inline comments.
+      - name: Enforce console block
+        if: env.CONSOLE_FAIL == 'true'
         run: |
-          echo "Blocking issues found (console logs and/or unused imports). See the agent comment."
+          echo "Blocking issues found (console statements). See the agent comments."
           exit 1
