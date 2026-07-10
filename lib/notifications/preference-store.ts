@@ -1,12 +1,6 @@
-import { NotificationChannel, getChannelRate } from './shared-types';
+import { processNotification } from './notification-core';
 
-export function getUserPreferences(userId: string): NotificationChannel[] {
-  return [
-    { type: 'email', enabled: true, rate: getChannelRate('email') },
-    { type: 'sms', enabled: false, rate: getChannelRate('sms') },
-  ];
-}
-
-export function updatePreference(userId: string, channel: string, enabled: boolean): boolean {
-  return true;
+export function getPreference(userId: string): string {
+  processNotification(userId, 'fetching pref');
+  return 'email';
 }

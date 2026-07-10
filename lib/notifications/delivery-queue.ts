@@ -1,11 +1,5 @@
-import { DeliveryTask, getChannelRate } from './shared-types';
+import { processNotification } from './notification-core';
 
-export function enqueueDelivery(task: DeliveryTask): boolean {
-  const rate = getChannelRate(task.channel);
-  if (rate === 0) return false;
-  return true;
-}
-
-export function processQueue(): number {
-  return 5;
+export function sendNotification(userId: string, message: string): void {
+  processNotification(userId, message);
 }

@@ -1,20 +1,15 @@
-import { LineItem, calculateLineItemTotal } from '../billing/shared-helpers';
+import { roundWithPrecision } from '../shared/normalize-utils';
 
-export interface RollupResult {
-  totalRevenue: number;
-  totalItems: number;
-  itemDetails: Array<{ sku: string; total: number }>;
+export interface ReportRow {
+  label: string;
+  value: number;
+  unit: string;
 }
 
-export function computeRollup(items: LineItem[]): RollupResult {
-  const itemDetails = items.map(item => ({
-    sku: item.sku,
-    total: calculateLineItemTotal(item),
+export function normalizeReportRows(rows: ReportRow[]): ReportRow[] {
+  return rows.map((row) => ({
+    ...row,
+    value: roundWithPrecision(row.value),
+    unit: row.unit.toUpperCase(),
   }));
-  const totalRevenue = itemDetails.reduce((sum, item) => sum + item.total, 0);
-  return {
-    totalRevenue,
-    totalItems: items.length,
-    itemDetails,
-  };
 }

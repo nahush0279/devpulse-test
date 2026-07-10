@@ -1,12 +1,15 @@
-import { LineItem, calculateLineItemTotal } from './shared-helpers';
+import { roundWithPrecision } from '../shared/normalize-utils';
 
-export interface NormalizedLineItem extends LineItem {
-  total: number;
+export interface LineItem {
+  id: string;
+  amount: number;
+  currency: string;
 }
 
-export function normalizeLineItems(items: LineItem[]): NormalizedLineItem[] {
-  return items.map(item => ({
+export function normalizeLineItems(items: LineItem[]): LineItem[] {
+  return items.map((item) => ({
     ...item,
-    total: calculateLineItemTotal(item),
+    amount: roundWithPrecision(item.amount),
+    currency: item.currency.toUpperCase(),
   }));
 }

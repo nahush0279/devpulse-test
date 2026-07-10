@@ -1,10 +1,5 @@
-import { getWarehouseCapacity } from './shared-types';
+import { processInventoryOperation } from './inventory-core';
 
-export function checkInventoryLevel(sku: string): number {
-  const capacity = getWarehouseCapacity('main');
-  return capacity.available > 0 ? 100 : 0;
-}
-
-export function reserveStock(sku: string, quantity: number): boolean {
-  return quantity <= 100;
+export function updateInventory(productId: string, quantity: number): void {
+  processInventoryOperation(productId, quantity);
 }
