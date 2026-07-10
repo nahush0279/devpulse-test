@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 
 const {
   GROQ_API_KEY,
+  DEEPSEEK_API_KEY,
   GITHUB_TOKEN,
   PR_NUMBER,
   REPO,
@@ -18,7 +19,13 @@ const {
 } = process.env;
 
 const COMMENT_MARKER = "<!-- fallow-ai-agent -->";
-const MODEL = "llama-3.3-70b-versatile";
+// DeepSeek is the primary enrichment provider (OpenAI-compatible API);
+// Groq remains as a fallback when only GROQ_API_KEY is configured.
+const AI = DEEPSEEK_API_KEY
+  ? { key: DEEPSEEK_API_KEY, url: "https://api.deepseek.com/chat/completions", model: "deepseek-chat" }
+  : GROQ_API_KEY
+    ? { key: GROQ_API_KEY, url: "https://api.groq.com/openai/v1/chat/completions", model: "llama-3.3-70b-versatile" }
+    : null;
 
 // ---------------------------------------------------------------------------
 // 1. Load fallow report
@@ -195,24 +202,48 @@ for (const f of cx.findings ?? []) {
   });
 }
 
+// ESLint findings (unused imports/vars) captured by the workflow as JSON —
+// previously these only produced a summary bullet with no file/line comment.
+try {
+  const cwd = process.cwd().replace(/\\/g, "/") + "/";
+  for (const file of JSON.parse(readFileSync("eslint-report.json", "utf8"))) {
+    const rel = file.filePath.replace(/\\/g, "/");
+    for (const m of file.messages ?? []) {
+      findings.push({
+        category: "unused-import",
+        label: "Unused import/variable",
+        path: rel.startsWith(cwd) ? rel.slice(cwd.length) : rel,
+        line: m.line ?? null,
+        blocking: true,
+        introduced: true,
+        detail: m.message,
+        fix: "Remove the unused import/binding.",
+        inline: m.line != null,
+      });
+    }
+  }
+} catch {
+  /* no eslint report — nothing flagged or step skipped */
+}
+
 const introduced = findings.filter((f) => f.introduced);
 const inlineFindings = introduced.filter((f) => f.inline && f.path && f.line);
 const summaryOnly = introduced.filter((f) => !f.inline || !f.line);
 
 // ---------------------------------------------------------------------------
-// 3. Optionally enrich each inline finding with one short Groq sentence
+// 3. Optionally enrich each inline finding with one short AI sentence
 // ---------------------------------------------------------------------------
 async function groqEnrich(f) {
-  if (!GROQ_API_KEY) return null;
+  if (!AI) return null;
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const res = await fetch(AI.url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${GROQ_API_KEY}`,
+        authorization: `Bearer ${AI.key}`,
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: AI.model,
         max_tokens: 120,
         temperature: 0.2,
         messages: [
@@ -228,10 +259,14 @@ async function groqEnrich(f) {
         ],
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`AI enrichment failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+      return null;
+    }
     const data = await res.json();
     return (data.choices?.[0]?.message?.content ?? "").trim() || null;
-  } catch {
+  } catch (err) {
+    console.error(`AI enrichment error: ${err.message}`);
     return null;
   }
 }
