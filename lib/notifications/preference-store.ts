@@ -1,6 +1,5 @@
-import { processNotification } from './notification-core';
+import { type NotificationPreference } from './notification-types';
 
-export function getPreference(userId: string): string {
-  processNotification(userId, 'fetching pref');
+export function getPreference(userId: string): NotificationPreference {
   return 'email';
 }

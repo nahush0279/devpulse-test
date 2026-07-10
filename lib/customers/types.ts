@@ -2,22 +2,23 @@ export interface CustomerProfile {
   id: string;
   name: string;
   email: string;
+  plan: 'free' | 'pro' | 'enterprise';
+  usageCredits: number;
 }
 
 interface PendingInvitation {
-  email: string;
-  role: string;
-  expiresAt: Date;
+  inviteeEmail: string;
+  role: 'editor' | 'viewer';
+  expiresAt: number;
 }
 
 interface StaleCacheEntry {
   key: string;
-  value: unknown;
-  lastAccessed: Date;
+  lastAccessed: number;
+  ttl: number;
 }
 
 interface WorkspaceMigrationState {
   workspaceId: string;
-  status: 'pending' | 'in-progress' | 'completed';
-  startedAt: Date | null;
+  migrationPhase: 'draining' | 'copying' | 'verifying';
 }

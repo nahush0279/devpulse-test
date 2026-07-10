@@ -1,25 +1,28 @@
-export interface ProductListing {
+export interface CatalogProduct {
   id: string;
-  name: string;
+  title: string;
+  sku: string;
   price: number;
   category: string;
+  tags: string[];
 }
 
 interface ArchivedUserRecord {
   userId: string;
-  archivedAt: Date;
-  reason: string;
+  archivedAt: number;
+  reason: 'deleted' | 'suspended' | 'expired';
 }
 
 interface LegacySessionToken {
   token: string;
-  userId: string;
-  issuedAt: Date;
+  issuedAt: number;
+  expiresAt: number;
+  scopes: string[];
 }
 
 interface DeprecatedAuditEntry {
-  entryId: string;
   action: string;
-  timestamp: Date;
-  userId: string;
+  actorId: string;
+  timestamp: number;
+  details: Record<string, unknown>;
 }

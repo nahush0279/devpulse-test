@@ -1,15 +1,29 @@
-import { roundWithPrecision } from '../shared/normalize-utils';
+import { calculateLineItemTotals } from '../billing/calc-helpers';
 
-export interface ReportRow {
-  label: string;
-  value: number;
-  unit: string;
+export interface OrderRollup {
+  orderId: string;
+  items: Array<{
+    sku: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    taxRate: number;
+  }>;
 }
 
-export function normalizeReportRows(rows: ReportRow[]): ReportRow[] {
-  return rows.map((row) => ({
-    ...row,
-    value: roundWithPrecision(row.value),
-    unit: row.unit.toUpperCase(),
-  }));
+export function rollupOrder(order: OrderRollup): {
+  netAmount: number;
+  taxAmount: number;
+  totalAmount: number;
+} {
+  let netAmount = 0;
+  let taxAmount = 0;
+  let totalAmount = 0;
+  for (const item of order.items) {
+    const totals = calculateLineItemTotals(item);
+    netAmount += totals.netAmount;
+    taxAmount += totals.taxAmount;
+    totalAmount += totals.totalAmount;
+  }
+  return { netAmount, taxAmount, totalAmount };
 }

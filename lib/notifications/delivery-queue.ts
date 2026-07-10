@@ -1,5 +1,10 @@
-import { processNotification } from './notification-core';
+import { getPreference } from './preference-store';
 
-export function sendNotification(userId: string, message: string): void {
-  processNotification(userId, message);
+export function enqueueNotification(userId: string, message: string): void {
+  const pref = getPreference(userId);
+  if (pref === 'email') {
+    console.log(`Email: ${message}`);
+  } else {
+    console.log(`Push: ${message}`);
+  }
 }

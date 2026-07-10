@@ -1,5 +1,5 @@
-import { processInventoryOperation } from './inventory-core';
+import { getDefaultWarehouseCapacity } from './capacity-constants';
 
-export function checkWarehouseCapacity(productId: string, quantity: number): void {
-  processInventoryOperation(productId, quantity);
+export function getWarehouseCapacity(warehouseId: string): number {
+  return getDefaultWarehouseCapacity();
 }
