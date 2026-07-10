@@ -1,11 +1,8 @@
-import { reserveShelfSpace } from "./warehouse-service";
+import { WarehouseService } from "./warehouse-service";
 
-export function countAvailableUnits(sku: string, quantity: number): number {
-  reserveShelfSpace(sku);
-
-  if (quantity <= 0) {
-    return 0;
+export class InventoryService {
+  getStockLevels(productId: string): number {
+    const warehouse = new WarehouseService();
+    return warehouse.getStock(productId);
   }
-
-  return quantity;
 }

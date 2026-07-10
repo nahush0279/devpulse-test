@@ -1,31 +1,34 @@
-import type { ComponentProps, ReactNode } from "react";
-import type { Metadata, Viewport } from "next";
-
-/** Used by the home page. */
-export type GreetingOptions = {
-  name: string;
-  formal?: boolean;
-};
-
-/** Unused type — should be flagged by Fallow. */
-export type ArchivedUserRecord = {
+export interface Product {
   id: string;
-  deletedAt: string;
-};
-
-/** Unused type — should be flagged by Fallow. */
-export type LegacySessionToken = {
-  token: string;
-  expiresAt: number;
-};
-
-/** Unused interface — should be flagged by Fallow. */
-export interface DeprecatedAuditEntry {
-  actor: string;
-  action: string;
-  timestamp: string;
+  name: string;
+  sku: string;
+  price: number;
+  inventory: number;
 }
 
-export function formatGreeting({ name, formal = false }: GreetingOptions): string {
-  return formal ? `Good day, ${name}.` : `Hi, ${name}!`;
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  parentId: string | null;
+}
+
+interface ArchivedUserRecord {
+  userId: string;
+  archivedAt: Date;
+  reason: string;
+}
+
+interface LegacySessionToken {
+  token: string;
+  userId: string;
+  expiresAt: Date;
+  version: number;
+}
+
+interface DeprecatedAuditEntry {
+  action: string;
+  userId: string;
+  timestamp: Date;
+  details: Record<string, unknown>;
 }
