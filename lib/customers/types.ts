@@ -1,24 +1,23 @@
-export interface CustomerRecord {
+export interface CustomerProfile {
   id: string;
   name: string;
   email: string;
-  createdAt: Date;
+  plan: string;
 }
 
-interface PendingInvitation {
+type PendingInvitation = {
   email: string;
-  token: string;
-  expiresAt: Date;
-}
+  role: string;
+  invitedAt: Date;
+};
 
-interface StaleCacheEntry {
+type StaleCacheEntry = {
   key: string;
-  lastAccessed: Date;
-  size: number;
-}
+  age: number;
+};
 
-interface WorkspaceMigrationState {
-  workspaceId: string;
-  phase: "drain" | "copy" | "verify" | "cutover";
-  startedAt: Date;
-}
+type WorkspaceMigrationState = {
+  sourceId: string;
+  targetId: string;
+  status: string;
+};

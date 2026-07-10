@@ -1,24 +1,23 @@
-export type ProductListing = {
-  id: string;
+export interface Product {
   sku: string;
+  name: string;
   price: number;
-  category: string;
-};
+}
 
-type ArchivedUserRecord = {
-  userId: string;
-  archivedAt: Date;
-  reason: string;
-};
+interface ArchivedUserRecord {
+  id: string;
+  archivedAt: string;
+}
 
-type LegacySessionToken = {
-  tokenId: string;
-  issuedAt: Date;
-  expiresAt: Date;
-};
+interface LegacySessionToken {
+  token: string;
+  expiresAt: number;
+}
 
-type DeprecatedAuditEntry = {
-  entryId: string;
+interface DeprecatedAuditEntry {
+  id: string;
   action: string;
-  timestamp: Date;
-};
+  timestamp: string;
+}
+
+export const TAX_RATE = 0.08;

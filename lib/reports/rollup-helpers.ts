@@ -1,23 +1,8 @@
-import { calculateTaxAmount } from "../shared/tax-utils";
+import { computeLineItemsTotal } from '../billing/compute-line-items';
 
-export interface ReportRow {
-  label: string;
-  value: number;
-  taxRate: number;
-}
-
-export interface EnrichedReportRow extends ReportRow {
-  taxAmount: number;
-  total: number;
-}
-
-export function enrichReportRows(rows: ReportRow[]): EnrichedReportRow[] {
-  return rows.map((row) => {
-    const taxAmount = calculateTaxAmount(row.value, row.taxRate);
-    return {
-      ...row,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      total: Math.round((row.value + taxAmount) * 100) / 100,
-    };
-  });
+export function rollupLineItems(items: any[]) {
+  // Roll up line items for report generation
+  const total = computeLineItemsTotal(items);
+  const count = items.length;
+  return { items, total, count };
 }

@@ -1,32 +1,17 @@
-import { calculateTaxAmount } from "../shared/tax-utils";
+import { computeLineItemsTotal } from './compute-line-items';
 
 export interface LineItem {
-  description: string;
+  item: string;
   quantity: number;
   unitPrice: number;
-  taxRate: number;
 }
 
-export interface NormalizedLineItem {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  lineTotal: number;
-  taxAmount: number;
-  grandTotal: number;
-}
-
-export function normalizeLineItems(items: LineItem[]): NormalizedLineItem[] {
-  return items.map((item) => {
-    const lineTotal = item.quantity * item.unitPrice;
-    const taxAmount = calculateTaxAmount(lineTotal, item.taxRate);
-    return {
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      lineTotal,
-      taxAmount: Math.round(taxAmount * 100) / 100,
-      grandTotal: Math.round((lineTotal + taxAmount) * 100) / 100,
-    };
-  });
+export function normalizeLineItems(items: LineItem[]) {
+  // Normalise all line items to a standard format
+  const normalized = items.map((item) => ({
+    ...item,
+    total: item.quantity * item.unitPrice,
+  }));
+  const total = computeLineItemsTotal(items);
+  return { items: normalized, total };
 }
