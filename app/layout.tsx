@@ -20,6 +20,8 @@ console.log("test comment.");
 
 console.log("test comment.");
 
+console.log("test comment.");
+
 export const metadata: Metadata = {
   title: "DevPulse Test",
   description: "Fixture project for Fallow extension checks",

@@ -3,6 +3,8 @@ import { twMerge } from "tailwind-merge";
 import type { Metadata, Viewport, Route } from "next";
 import type { ComponentProps, ReactNode, CSSProperties } from "react";
 import type { ReadonlyURLSearchParams } from "next/navigation";
+import type { PendingInvitation } from "@/lib/customers/types";
+import { cn } from "@/lib/utils";
 import { MetricTile } from "@/components/dashboard/metric-tile";
 import { buildHomeMetrics } from "@/lib/dashboard/home-metrics";
 import { buildLabel } from "@/lib/fallow-fixtures/build-label";
