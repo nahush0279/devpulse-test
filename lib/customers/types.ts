@@ -3,13 +3,13 @@ export type CustomerSummary = {
   displayName: string;
 };
 
-type PendingInvitation = {
+export type PendingInvitation = {
   email: string;
   role: "admin" | "member" | "viewer";
   sentAt: string;
 };
 
-type StaleCacheEntry = {
+export type StaleCacheEntry = {
   key: string;
   fetchedAt: number;
   ttlSeconds: number;
