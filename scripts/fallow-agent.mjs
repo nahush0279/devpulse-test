@@ -5,6 +5,7 @@
 // Node 20+ (global fetch). No external dependencies.
 
 import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 
 const {
   GROQ_API_KEY,
@@ -12,6 +13,7 @@ const {
   GITHUB_TOKEN,
   PR_NUMBER,
   REPO,
+  BASE_REF = "main",
   HEAD_SHA = "",
   CONSOLE_FAIL,
   UNUSED_IMPORT_FAIL,
@@ -188,26 +190,28 @@ for (const u of dc.unlisted_dependencies ?? []) {
 }
 
 for (const de of dc.duplicate_exports ?? []) {
-  const loc = de.locations?.[0];
-  const others = (de.locations ?? [])
-    .slice(1)
-    .map((l) => `\`${l.path}:${l.line}\``)
-    .join(", ");
+  const locations = de.locations ?? [];
   const { text } = pickAction(de.actions);
-  if (de.locations?.length)
-    dupExportPairs.add(pairKey(de.locations.map((l) => l.path)));
-  findings.push({
-    category: "duplicate-export",
-    label: "Duplicate export",
-    path: loc?.path,
-    line: loc?.line,
-    blocking: true,
-    introduced: de.introduced,
-    detail: `\`${de.export_name}\` is also exported from ${others || "another location"}.`,
-    fix: text,
-    suggestion: null,
-    inline: loc?.line != null,
-  });
+  if (locations.length)
+    dupExportPairs.add(pairKey(locations.map((l) => l.path)));
+  for (const loc of locations) {
+    const others = locations
+      .filter((l) => l.path !== loc.path || l.line !== loc.line)
+      .map((l) => `\`${l.path}:${l.line}\``)
+      .join(", ");
+    findings.push({
+      category: "duplicate-export",
+      label: "Duplicate export",
+      path: loc.path,
+      line: loc.line,
+      blocking: true,
+      introduced: de.introduced,
+      detail: `\`${de.export_name}\` is also exported from ${others || "another location"}.`,
+      fix: text,
+      suggestion: null,
+      inline: loc.line != null,
+    });
+  }
 }
 
 for (const c of dc.circular_dependencies ?? []) {
@@ -321,9 +325,56 @@ try {
   /* no eslint report */
 }
 
+// Lines that appear as additions in the PR diff — GitHub only anchors inline
+// review comments on lines visible in the diff. If ANY batched comment misses,
+// the whole review POST returns 422 and we used to lose every inline comment.
+function loadDiffAnchors() {
+  const base = `origin/${BASE_REF}`;
+  try {
+    execSync(`git fetch origin ${BASE_REF} 2>/dev/null || true`, {
+      stdio: "ignore",
+    });
+    const diff = execSync(
+      `git diff ${base} HEAD --unified=0 -- "*.js" "*.jsx" "*.ts" "*.tsx"`,
+      { encoding: "utf8" },
+    );
+    const anchors = new Set();
+    let file = null;
+    let line = null;
+    for (const row of diff.split("\n")) {
+      if (row.startsWith("+++ b/")) {
+        file = row.slice(6);
+        line = null;
+      } else if (row.startsWith("@@")) {
+        const m = row.match(/\+(\d+)/);
+        line = m ? parseInt(m[1], 10) : null;
+      } else if (row.startsWith("+") && !row.startsWith("+++")) {
+        if (file && line != null) anchors.add(`${file}:${line}`);
+        if (line != null) line++;
+      }
+    }
+    return anchors;
+  } catch (err) {
+    console.error("Could not build diff anchors:", err.message);
+    return null;
+  }
+}
+
+const diffAnchors = loadDiffAnchors();
+
 const introduced = findings.filter((f) => f.introduced);
-const inlineFindings = introduced.filter((f) => f.inline && f.path && f.line);
-const summaryOnly = introduced.filter((f) => !f.inline || !f.line);
+const inlineCandidates = introduced.filter((f) => f.inline && f.path && f.line);
+const inlineFindings = inlineCandidates.filter((f) => {
+  if (!diffAnchors) return true;
+  const key = `${f.path}:${f.line}`;
+  if (diffAnchors.has(key)) return true;
+  // Keep in summary instead of sending a comment GitHub will reject.
+  f._diffAnchorMiss = true;
+  return false;
+});
+const summaryOnly = introduced.filter(
+  (f) => !f.inline || !f.line || f._diffAnchorMiss,
+);
 
 // ---------------------------------------------------------------------------
 // 3. AI enrichment (judgment categories only)
@@ -482,41 +533,59 @@ async function dismissOldReviews() {
   }
 }
 
+async function postInlineComment(comment) {
+  const r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/comments`, {
+    method: "POST",
+    body: JSON.stringify({
+      commit_id: HEAD_SHA,
+      path: comment.path,
+      line: comment.line,
+      side: "RIGHT",
+      body: comment.body,
+    }),
+  });
+  if (!r.ok) {
+    console.error(
+      `Inline comment skipped for ${comment.path}:${comment.line}: ${r.status} ${(await r.text()).slice(0, 200)}`,
+    );
+    return false;
+  }
+  return true;
+}
+
 async function postReview() {
   const comments = await buildReviewComments();
   const bodyText = buildSummaryBody();
 
+  // Post the summary review first (never bundle inline comments — one bad
+  // anchor used to 422-reject the entire batch and drop all inline comments).
   let r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/reviews`, {
     method: "POST",
     body: JSON.stringify({
       commit_id: HEAD_SHA,
       body: bodyText,
       event: "COMMENT",
-      comments,
     }),
   });
-
-  if (r.status === 422) {
-    const errText = await r.text();
-    console.error(
-      "Inline review rejected (likely a line not in diff). Falling back to summary. Detail:",
-      errText.slice(0, 300),
-    );
-    r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/reviews`, {
-      method: "POST",
-      body: JSON.stringify({
-        commit_id: HEAD_SHA,
-        body: bodyText,
-        event: "COMMENT",
-      }),
-    });
-  }
 
   if (!r.ok)
     throw new Error(
       `Review POST failed: ${r.status} ${(await r.text()).slice(0, 300)}`,
     );
-  console.log(`Posted review with ${comments.length} inline comment(s).`);
+
+  let posted = 0;
+  for (const comment of comments) {
+    if (await postInlineComment(comment)) posted++;
+  }
+
+  const skipped = comments.length - posted;
+  const anchorSkipped = inlineCandidates.length - inlineFindings.length;
+  console.log(
+    `Posted summary review + ${posted}/${comments.length} inline comment(s)` +
+      (anchorSkipped ? ` (${anchorSkipped} not on diff lines -> summary)` : "") +
+      (skipped ? ` (${skipped} rejected by GitHub)` : "") +
+      ".",
+  );
 }
 
 try {
