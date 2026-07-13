@@ -1,6 +1,6 @@
 type WeightUnit = "kg" | "lb";
 
-export function calculateShippingCost(
+export function calculateShippingCostB(
   weight: number,
   unit: WeightUnit,
   distanceKm: number,
