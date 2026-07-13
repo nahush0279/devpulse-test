@@ -1,12 +1,12 @@
 import { twMerge } from "tailwind-merge";
 import type { Route } from "next";
-import { enqueueDigest } from "./delivery-queue";
+import { computeScheduled } from "./digest-schedule";
 
 const digestState = new Map<string, boolean>();
 
 export function getQuietHours(userId: string): boolean {
   if (!digestState.has(userId)) {
-    digestState.set(userId, enqueueDigest(userId).scheduled);
+    digestState.set(userId, computeScheduled(false));
   }
 
   return digestState.get(userId) ?? false;
