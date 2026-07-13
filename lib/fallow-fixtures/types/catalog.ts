@@ -8,19 +8,19 @@ export type GreetingOptions = {
 };
 
 /** Unused type — should be flagged by Fallow. */
-export type ArchivedUserRecord = {
+type ArchivedUserRecord = {
   id: string;
   deletedAt: string;
 };
 
 /** Unused type — should be flagged by Fallow. */
-export type LegacySessionToken = {
+type LegacySessionToken = {
   token: string;
   expiresAt: number;
 };
 
 /** Unused interface — should be flagged by Fallow. */
-export interface DeprecatedAuditEntry {
+interface DeprecatedAuditEntry {
   actor: string;
   action: string;
   timestamp: string;
