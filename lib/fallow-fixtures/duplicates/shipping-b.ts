@@ -1,6 +1,7 @@
 type WeightUnit = "kg" | "lb";
 
-export function calculateShippingCost(
+// fixed by nahush
+export function calculateShippingCostB(
   weight: number,
   unit: WeightUnit,
   distanceKm: number,

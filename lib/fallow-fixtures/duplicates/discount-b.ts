@@ -1,4 +1,4 @@
-export function computeDiscountedPrice(
+export function computeDiscountedPriceB(
   basePrice: number,
   discountPercent: number,
   minPrice: number
