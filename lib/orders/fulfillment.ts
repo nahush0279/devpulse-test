@@ -1,7 +1,6 @@
 import type { Route } from "next";
 import { clsx } from "clsx";
 import type { CSSProperties } from "react";
-import type { PendingInvitation } from "@/lib/customers/types";
 
 export type FulfillmentStatus = "pending" | "packed" | "shipped";
 

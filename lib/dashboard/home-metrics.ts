@@ -4,11 +4,7 @@ import { twMerge } from "tailwind-merge";
 import type { Metadata } from "next";
 import type { Route } from "next";
 import type { ComponentProps } from "react";
-import type {
-  CustomerSummary,
-  PendingInvitation,
-  StaleCacheEntry,
-} from "@/lib/customers/types";
+import type { CustomerSummary } from "@/lib/customers/types";
 import { normalizeLineItems } from "@/lib/billing/normalize-line-items";
 import { calculateTax } from "@/lib/billing/tax-calculator";
 import { prepareReportRows } from "@/lib/reports/rollup-helpers";
