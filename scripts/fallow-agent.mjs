@@ -1,25 +1,42 @@
 // scripts/fallow-agent.mjs
-// AI review agent: Fallow (deterministic file+line facts) -> Groq (prose) ->
+// AI review agent: Fallow (deterministic file+line facts) -> Groq/DeepSeek (prose) ->
 // GitHub Pull Request REVIEW with inline comments (CodeRabbit-style).
-// Requires: GROQ_API_KEY, GITHUB_TOKEN, PR_NUMBER, REPO, HEAD_SHA env vars.
+// Requires: GROQ_API_KEY or DEEPSEEK_API_KEY, GITHUB_TOKEN, PR_NUMBER, REPO, HEAD_SHA.
 // Node 20+ (global fetch). No external dependencies.
 
 import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 
 const {
   GROQ_API_KEY,
+  DEEPSEEK_API_KEY,
   GITHUB_TOKEN,
   PR_NUMBER,
   REPO,
+  BASE_REF = "main",
   HEAD_SHA = "",
   CONSOLE_FAIL,
+  UNUSED_IMPORT_FAIL,
 } = process.env;
 
 const COMMENT_MARKER = "<!-- fallow-ai-agent -->";
-const MODEL = "llama-3.3-70b-versatile";
 
-// Mechanical categories: skip the Groq call (Fallow's own text is enough,
-// and the LLM just repeats itself). Judgment categories still get enriched.
+// DeepSeek is primary; Groq is fallback when only GROQ_API_KEY is set.
+const AI = DEEPSEEK_API_KEY
+  ? {
+      key: DEEPSEEK_API_KEY,
+      url: "https://api.deepseek.com/chat/completions",
+      model: "deepseek-chat",
+    }
+  : GROQ_API_KEY
+    ? {
+        key: GROQ_API_KEY,
+        url: "https://api.groq.com/openai/v1/chat/completions",
+        model: "llama-3.3-70b-versatile",
+      }
+    : null;
+
+// Mechanical categories: skip AI enrichment (Fallow/ESLint text is enough).
 const SKIP_GROQ = new Set([
   "unused-file",
   "unused-export",
@@ -27,6 +44,7 @@ const SKIP_GROQ = new Set([
   "unused-dependency",
   "unresolved-import",
   "unlisted-dependency",
+  "unused-import",
   "console",
 ]);
 
@@ -56,28 +74,21 @@ function pickAction(actions = []) {
   return { text: `${a.description}${auto}`, action: a };
 }
 
-// Build a GitHub ```suggestion block for the auto-fixable cases we can
-// express as a literal line edit. For "remove" actions, an empty suggestion
-// deletes the line; for others we skip (can't safely synthesize the new code).
 function suggestionBlock(category, action) {
   if (!action?.auto_fixable) return null;
-  // Removing an unused export / dependency line -> suggest deleting that line.
   if (category === "unused-export" && action.type === "remove-export") {
-    return "```suggestion\n```"; // delete the line
+    return "```suggestion\n```";
   }
   if (category === "unused-dependency" && action.type === "remove-dependency") {
-    return "```suggestion\n```"; // delete the dependency line in package.json
+    return "```suggestion\n```";
   }
   return null;
 }
 
 const findings = [];
-// Track file-pairs already reported as a blocking duplicate-export so we can
-// suppress the advisory clone-group comment for the same pair (dedupe #1).
 const dupExportPairs = new Set();
 const pairKey = (paths) => [...paths].sort().join("|");
 
-// --- unused files (no line -> summary only) ---
 for (const f of dc.unused_files ?? []) {
   const { text } = pickAction(f.actions);
   findings.push({
@@ -93,7 +104,7 @@ for (const f of dc.unused_files ?? []) {
     inline: false,
   });
 }
-// --- unused exports ---
+
 for (const e of dc.unused_exports ?? []) {
   const { text, action } = pickAction(e.actions);
   findings.push({
@@ -109,7 +120,7 @@ for (const e of dc.unused_exports ?? []) {
     inline: e.line != null,
   });
 }
-// --- unused types ---
+
 for (const t of dc.unused_types ?? []) {
   const { text, action } = pickAction(t.actions);
   findings.push({
@@ -125,7 +136,7 @@ for (const t of dc.unused_types ?? []) {
     inline: t.line != null,
   });
 }
-// --- unused dependencies ---
+
 for (const d of dc.unused_dependencies ?? []) {
   const { text, action } = pickAction(d.actions);
   findings.push({
@@ -141,7 +152,7 @@ for (const d of dc.unused_dependencies ?? []) {
     inline: d.line != null,
   });
 }
-// --- unresolved / unlisted imports ---
+
 for (const u of dc.unresolved_imports ?? []) {
   const { text } = pickAction(u.actions);
   findings.push({
@@ -159,6 +170,7 @@ for (const u of dc.unresolved_imports ?? []) {
     inline: u.line != null,
   });
 }
+
 for (const u of dc.unlisted_dependencies ?? []) {
   const { text } = pickAction(u.actions);
   findings.push({
@@ -176,30 +188,32 @@ for (const u of dc.unlisted_dependencies ?? []) {
     inline: u.line != null,
   });
 }
-// --- duplicate exports (blocking) -> record file pairs to dedupe clones ---
+
 for (const de of dc.duplicate_exports ?? []) {
-  const loc = de.locations?.[0];
-  const others = (de.locations ?? [])
-    .slice(1)
-    .map((l) => `\`${l.path}:${l.line}\``)
-    .join(", ");
+  const locations = de.locations ?? [];
   const { text } = pickAction(de.actions);
-  if (de.locations?.length)
-    dupExportPairs.add(pairKey(de.locations.map((l) => l.path)));
-  findings.push({
-    category: "duplicate-export",
-    label: "Duplicate export",
-    path: loc?.path,
-    line: loc?.line,
-    blocking: true,
-    introduced: de.introduced,
-    detail: `\`${de.export_name}\` is also exported from ${others || "another location"}.`,
-    fix: text,
-    suggestion: null,
-    inline: loc?.line != null,
-  });
+  if (locations.length)
+    dupExportPairs.add(pairKey(locations.map((l) => l.path)));
+  for (const loc of locations) {
+    const others = locations
+      .filter((l) => l.path !== loc.path || l.line !== loc.line)
+      .map((l) => `\`${l.path}:${l.line}\``)
+      .join(", ");
+    findings.push({
+      category: "duplicate-export",
+      label: "Duplicate export",
+      path: loc.path,
+      line: loc.line,
+      blocking: true,
+      introduced: de.introduced,
+      detail: `\`${de.export_name}\` is also exported from ${others || "another location"}.`,
+      fix: text,
+      suggestion: null,
+      inline: loc.line != null,
+    });
+  }
 }
-// --- circular dependencies (advisory) ---
+
 for (const c of dc.circular_dependencies ?? []) {
   const edge = c.edges?.[0] ?? {};
   const cyclePath = (c.files ?? []).map((f) => f.split("/").pop()).join(" -> ");
@@ -217,10 +231,10 @@ for (const c of dc.circular_dependencies ?? []) {
     inline: edge.line != null,
   });
 }
-// --- duplication clone groups (advisory) -> SKIP if same pair already blocking ---
+
 for (const g of dup.clone_groups ?? []) {
   const files = (g.instances ?? []).map((i) => i.file);
-  if (files.length && dupExportPairs.has(pairKey(files))) continue; // dedupe #1
+  if (files.length && dupExportPairs.has(pairKey(files))) continue;
   const inst = g.instances?.[0] ?? {};
   const others = (g.instances ?? [])
     .slice(1)
@@ -240,7 +254,7 @@ for (const g of dup.clone_groups ?? []) {
     inline: inst.start_line != null,
   });
 }
-// --- complexity (advisory) ---
+
 for (const f of cx.findings ?? []) {
   const { text } = pickAction(f.actions);
   findings.push({
@@ -257,7 +271,7 @@ for (const f of cx.findings ?? []) {
   });
 }
 
-// --- console statements (from the workflow's console-hits.tsv) ---
+// Console statements from workflow console-hits.tsv (one inline comment per hit).
 try {
   const tsv = readFileSync("console-hits.tsv", "utf8").trim();
   if (tsv) {
@@ -274,35 +288,108 @@ try {
           introduced: true,
           detail:
             "Console statements should not ship to production. Remove it or use the project logger.",
-          fix: "Remove this console statement.",
-          suggestion: "```suggestion\n```", // one-click delete the line
+          fix: "Remove the console call, or add `// eslint-disable-next-line no-console` if intentional.",
+          suggestion: "```suggestion\n```",
           inline: true,
         });
       }
     }
   }
 } catch {
-  /* no console hits file -> nothing to add */
+  /* no console hits file */
 }
 
+// ESLint unused imports/vars on changed files (eslint-report.json from workflow).
+try {
+  const cwd = process.cwd().replace(/\\/g, "/") + "/";
+  for (const file of JSON.parse(readFileSync("eslint-report.json", "utf8"))) {
+    const rel = file.filePath.replace(/\\/g, "/");
+    const path = rel.startsWith(cwd) ? rel.slice(cwd.length) : rel;
+    for (const m of file.messages ?? []) {
+      if (m.severity < 2) continue;
+      findings.push({
+        category: "unused-import",
+        label: "Unused import/variable",
+        path,
+        line: m.line ?? null,
+        blocking: true,
+        introduced: true,
+        detail: m.message,
+        fix: "Remove the unused import or binding.",
+        suggestion: null,
+        inline: m.line != null,
+      });
+    }
+  }
+} catch {
+  /* no eslint report */
+}
+
+// Lines that appear as additions in the PR diff — GitHub only anchors inline
+// review comments on lines visible in the diff. If ANY batched comment misses,
+// the whole review POST returns 422 and we used to lose every inline comment.
+function loadDiffAnchors() {
+  const base = `origin/${BASE_REF}`;
+  try {
+    execSync(`git fetch origin ${BASE_REF} 2>/dev/null || true`, {
+      stdio: "ignore",
+    });
+    const diff = execSync(
+      `git diff ${base} HEAD --unified=0 -- "*.js" "*.jsx" "*.ts" "*.tsx"`,
+      { encoding: "utf8" },
+    );
+    const anchors = new Set();
+    let file = null;
+    let line = null;
+    for (const row of diff.split("\n")) {
+      if (row.startsWith("+++ b/")) {
+        file = row.slice(6);
+        line = null;
+      } else if (row.startsWith("@@")) {
+        const m = row.match(/\+(\d+)/);
+        line = m ? parseInt(m[1], 10) : null;
+      } else if (row.startsWith("+") && !row.startsWith("+++")) {
+        if (file && line != null) anchors.add(`${file}:${line}`);
+        if (line != null) line++;
+      }
+    }
+    return anchors;
+  } catch (err) {
+    console.error("Could not build diff anchors:", err.message);
+    return null;
+  }
+}
+
+const diffAnchors = loadDiffAnchors();
+
 const introduced = findings.filter((f) => f.introduced);
-const inlineFindings = introduced.filter((f) => f.inline && f.path && f.line);
-const summaryOnly = introduced.filter((f) => !f.inline || !f.line);
+const inlineCandidates = introduced.filter((f) => f.inline && f.path && f.line);
+const inlineFindings = inlineCandidates.filter((f) => {
+  if (!diffAnchors) return true;
+  const key = `${f.path}:${f.line}`;
+  if (diffAnchors.has(key)) return true;
+  // Keep in summary instead of sending a comment GitHub will reject.
+  f._diffAnchorMiss = true;
+  return false;
+});
+const summaryOnly = introduced.filter(
+  (f) => !f.inline || !f.line || f._diffAnchorMiss,
+);
 
 // ---------------------------------------------------------------------------
-// 3. Groq enrichment (judgment categories only)
+// 3. AI enrichment (judgment categories only)
 // ---------------------------------------------------------------------------
 async function groqEnrich(f) {
-  if (!GROQ_API_KEY || SKIP_GROQ.has(f.category)) return null;
+  if (!AI || SKIP_GROQ.has(f.category)) return null;
   try {
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const res = await fetch(AI.url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${GROQ_API_KEY}`,
+        authorization: `Bearer ${AI.key}`,
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: AI.model,
         max_tokens: 120,
         temperature: 0.2,
         messages: [
@@ -318,10 +405,16 @@ async function groqEnrich(f) {
         ],
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(
+        `AI enrichment failed: ${res.status} ${(await res.text()).slice(0, 200)}`,
+      );
+      return null;
+    }
     const data = await res.json();
     return (data.choices?.[0]?.message?.content ?? "").trim() || null;
-  } catch {
+  } catch (err) {
+    console.error(`AI enrichment error: ${err.message}`);
     return null;
   }
 }
@@ -333,7 +426,6 @@ function emoji(blocking) {
   return blocking ? "⛔" : "💡";
 }
 
-// #5 — category summary table at the top of the review.
 function categorySummary() {
   const counts = {};
   for (const f of introduced) {
@@ -360,7 +452,7 @@ async function buildReviewComments() {
       `${f.detail}\n\n` +
       (extra ? `${extra}\n\n` : "") +
       (f.fix ? `**Fix:** ${f.fix}` : "");
-    if (f.suggestion) body += `\n\n${f.suggestion}`; // #2 one-click suggestion
+    if (f.suggestion) body += `\n\n${f.suggestion}`;
     comments.push({ path: f.path, line: f.line, side: "RIGHT", body });
   }
   return comments;
@@ -381,6 +473,12 @@ function buildSummaryBody() {
   ) {
     body += `- ⛔ **Console statements** were added (see CI log).\n`;
   }
+  if (
+    UNUSED_IMPORT_FAIL === "true" &&
+    !introduced.some((f) => f.category === "unused-import")
+  ) {
+    body += `- ⛔ **Unused imports/variables** on changed files (see ESLint output in CI log).\n`;
+  }
 
   if (summaryOnly.length) {
     body += `\n<details><summary>Findings without a line anchor (${summaryOnly.length})</summary>\n\n`;
@@ -390,7 +488,11 @@ function buildSummaryBody() {
     body += `\n</details>\n`;
   }
 
-  if (!introduced.length && CONSOLE_FAIL !== "true") {
+  if (
+    !introduced.length &&
+    CONSOLE_FAIL !== "true" &&
+    UNUSED_IMPORT_FAIL !== "true"
+  ) {
     body += `No new issues introduced by this PR.\n`;
   }
   body += `\n<sub>Generated by the Fallow AI agent on \`${HEAD_SHA.slice(0, 7)}\`</sub>`;
@@ -431,44 +533,61 @@ async function dismissOldReviews() {
   }
 }
 
+async function postInlineComment(comment) {
+  const r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/comments`, {
+    method: "POST",
+    body: JSON.stringify({
+      commit_id: HEAD_SHA,
+      path: comment.path,
+      line: comment.line,
+      side: "RIGHT",
+      body: comment.body,
+    }),
+  });
+  if (!r.ok) {
+    console.error(
+      `Inline comment skipped for ${comment.path}:${comment.line}: ${r.status} ${(await r.text()).slice(0, 200)}`,
+    );
+    return false;
+  }
+  return true;
+}
+
 async function postReview() {
   const comments = await buildReviewComments();
   const bodyText = buildSummaryBody();
 
+  // Post the summary review first (never bundle inline comments — one bad
+  // anchor used to 422-reject the entire batch and drop all inline comments).
   let r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/reviews`, {
     method: "POST",
     body: JSON.stringify({
       commit_id: HEAD_SHA,
       body: bodyText,
       event: "COMMENT",
-      comments,
     }),
   });
-
-  if (r.status === 422) {
-    const errText = await r.text();
-    console.error(
-      "Inline review rejected (likely a line not in diff). Falling back to summary. Detail:",
-      errText.slice(0, 300),
-    );
-    r = await gh(`/repos/${REPO}/pulls/${PR_NUMBER}/reviews`, {
-      method: "POST",
-      body: JSON.stringify({
-        commit_id: HEAD_SHA,
-        body: bodyText,
-        event: "COMMENT",
-      }),
-    });
-  }
 
   if (!r.ok)
     throw new Error(
       `Review POST failed: ${r.status} ${(await r.text()).slice(0, 300)}`,
     );
-  console.log(`Posted review with ${comments.length} inline comment(s).`);
+
+  let posted = 0;
+  for (const comment of comments) {
+    if (await postInlineComment(comment)) posted++;
+  }
+
+  const skipped = comments.length - posted;
+  const anchorSkipped = inlineCandidates.length - inlineFindings.length;
+  console.log(
+    `Posted summary review + ${posted}/${comments.length} inline comment(s)` +
+      (anchorSkipped ? ` (${anchorSkipped} not on diff lines -> summary)` : "") +
+      (skipped ? ` (${skipped} rejected by GitHub)` : "") +
+      ".",
+  );
 }
 
-// ---------------------------------------------------------------------------
 try {
   await dismissOldReviews();
   await postReview();

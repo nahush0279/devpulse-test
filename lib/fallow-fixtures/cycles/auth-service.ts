@@ -8,6 +8,6 @@ export function validateToken(): boolean {
   }
 
   // Runtime reference keeps this a real circular dependency, not type-only.
-  tokenValid = formatUser("session") !== "";
+  tokenValid = typeof formatUser === "function";
   return tokenValid;
 }

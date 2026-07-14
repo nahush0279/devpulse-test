@@ -27,23 +27,31 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Type Check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test --if-present
+
       # ════════════════════════════════════════════════════════════════
       # BLOCKING CHECKS — fail the PR if any of these are introduced
       # ════════════════════════════════════════════════════════════════
 
-      # 1. console.log added by THIS PR -> write file+line JSON so the agent
-      #    can post each as an inline review comment (not just a CI-log line).
-      - name: Detect new console statements
+      # 1. console.log + unused imports on CHANGED files only.
+      #    console-hits.tsv -> agent posts one inline comment per hit.
+      #    eslint-report.json -> agent posts inline comments for unused imports.
+      - name: Detect console statements & unused imports (changed files)
         run: |
           git fetch origin "${{ github.base_ref }}" || true
           BASE="origin/${{ github.base_ref }}"
 
-          # Per added line, capture file + new-file line number from the diff hunks.
           git diff "$BASE" HEAD --unified=0 -- '*.js' '*.jsx' '*.ts' '*.tsx' \
           | awk '
             /^\+\+\+ b\// { file = substr($0, 7); next }
             /^@@/ {
-              # @@ -a,b +c,d @@  -> new-file start line is c
               match($0, /\+[0-9]+/); ln = substr($0, RSTART+1, RLENGTH-1) + 0; next
             }
             /^\+/ && !/^\+\+\+/ {
@@ -61,11 +69,13 @@ jobs:
             echo "CONSOLE_FAIL=true" >> "$GITHUB_ENV"
           fi
 
-      # 2. Fallow gate — fail the PR on blocking findings in changed files.
-      #    --changed-since scopes to what this PR touched (your "new-only").
-      #    --fail-on-issues exits 1 -> blocks the merge. NO commenting here:
-      #    all PR comments come from the agent, so there are no duplicate /
-      #    docs-link comments from Fallow's native output.
+          CHANGED=$(git diff "$BASE" HEAD --name-only --diff-filter=ACMR -- '*.js' '*.jsx' '*.ts' '*.tsx')
+          if [ -n "$CHANGED" ]; then
+            npx eslint --format json --output-file eslint-report.json $CHANGED \
+              || echo "UNUSED_IMPORT_FAIL=true" >> "$GITHUB_ENV"
+          fi
+
+      # 2. Fallow gate — blocking findings in changed files only.
       - name: Fallow audit (gate)
         run: |
           npx fallow audit \
@@ -77,7 +87,7 @@ jobs:
       # ════════════════════════════════════════════════════════════════
 
       - name: Fallow audit (JSON for agent)
-        if: always() # run even if the gate failed, so the comment still posts
+        if: always()
         run: |
           npx fallow audit \
             --changed-since "origin/${{ github.base_ref }}" \
@@ -89,18 +99,18 @@ jobs:
         if: always()
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
           BASE_REF: ${{ github.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           CONSOLE_FAIL: ${{ env.CONSOLE_FAIL }}
+          UNUSED_IMPORT_FAIL: ${{ env.UNUSED_IMPORT_FAIL }}
         run: node scripts/fallow-agent.mjs
 
-      # Surface the console-statement block as a job failure at the end,
-      # after the agent has posted its inline comments.
-      - name: Enforce console block
-        if: env.CONSOLE_FAIL == 'true'
+      - name: Enforce console/import blocks
+        if: env.CONSOLE_FAIL == 'true' || env.UNUSED_IMPORT_FAIL == 'true'
         run: |
-          echo "Blocking issues found (console statements). See the agent comments."
+          echo "Blocking issues found (console logs and/or unused imports). See the agent comments."
           exit 1
