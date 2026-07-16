@@ -11,7 +11,6 @@ import { prepareReportRows } from "@/lib/reports/rollup-helpers";
 import { enqueueDigest } from "@/lib/notifications/delivery-queue";
 import { resolveFulfillmentStatus } from "@/lib/orders/fulfillment";
 import { sortFacetBuckets } from "@/lib/search/facets";
-import { useDashboardPrefs } from "@/hooks/use-dashboard-prefs";
 
 const sampleCustomer: CustomerSummary = {
   id: "cust_01",
@@ -19,7 +18,6 @@ const sampleCustomer: CustomerSummary = {
 };
 
 export function buildHomeMetrics(stock: number) {
-  const prefs = useDashboardPrefs();
   const catalog = normalizeLineItems([
     { sku: "widget", qty: 2, unitPrice: 19.99 },
   ]);
@@ -48,6 +46,5 @@ export function buildHomeMetrics(stock: number) {
     digestScheduled: digest.scheduled,
     fulfillment,
     topFacet: facets[0]?.key ?? "none",
-    density: prefs.density,
   };
 }
