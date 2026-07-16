@@ -11,8 +11,10 @@ import { formatGreeting } from "@/lib/fallow-fixtures/types/catalog";
 import { getGreeting } from "@/lib/fallow-fixtures/greeting";
 import { formatUser } from "@/lib/fallow-fixtures/cycles/user-service";
 import { countAvailableUnits } from "@/lib/fallow-fixtures/cycles/inventory-service";
-import { computeDiscountedPrice as computeDiscountA } from "@/lib/fallow-fixtures/duplicates/discount-a";
-import { computeDiscountedPrice as computeDiscountB } from "@/lib/fallow-fixtures/duplicates/discount-b";
+import {
+  computeDiscountedPrice as computeDiscountA,
+  computeDiscountedPrice as computeDiscountB,
+} from "@/lib/fallow-fixtures/duplicates/discount-a";
 import { calculateShippingCost as calculateShippingA } from "@/lib/fallow-fixtures/duplicates/shipping-a";
 import { calculateShippingCost as calculateShippingB } from "@/lib/fallow-fixtures/duplicates/shipping-b";
 
