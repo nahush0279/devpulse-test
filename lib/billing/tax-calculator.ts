@@ -1,6 +1,7 @@
 import { getJurisdictionRate } from "./jurisdiction-lookup";
+import { computeTaxAmount } from "./tax-core_test";
 
 export function calculateTax(amount: number, region: string): number {
   const rate = getJurisdictionRate(region);
-  return Math.round(amount * rate * 100) / 100;
+  return computeTaxAmount(amount, rate);
 }
